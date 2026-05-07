@@ -6,6 +6,7 @@ import { profile } from "./routes/profile";
 type Bindings = AuthEnv & {
   DB: D1Database;
   IMAGES: R2Bucket;
+  ASSETS: Fetcher;
   ADMIN_USER_IDS: string;
 };
 
@@ -54,5 +55,16 @@ app.get(
     pageTitle: "CivicDoodie Parking API",
   })
 );
+
+// Unmatched /api/* paths return JSON 404. Everything else is delegated to the
+// assets binding, which serves a static file or — per wrangler.json's
+// not_found_handling: spa — falls back to /index.html so the Svelte router
+// can take over.
+app.notFound((c) => {
+  if (c.req.path.startsWith("/api/")) {
+    return c.json({ error: "Not Found" }, 404);
+  }
+  return c.env.ASSETS.fetch(c.req.raw);
+});
 
 export default app;

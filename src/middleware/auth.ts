@@ -5,6 +5,7 @@ type Env = {
   Bindings: AuthEnv & {
     DB: D1Database;
     IMAGES: R2Bucket;
+    ASSETS: Fetcher;
     ADMIN_USER_IDS: string;
   };
   Variables: {
