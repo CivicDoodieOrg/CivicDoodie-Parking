@@ -44,18 +44,23 @@ export function sanitizeScreenName(name: string): string {
 // validateScreenName returns an error message if the user-typed input doesn't
 // meet the rules — stricter than sanitize because a user picking their public
 // handle should know exactly what they're getting (no silent corrections).
+//
+// Mixed case is allowed; the user's case preference is preserved on save.
+// Uniqueness, reserved-word matching, and URL routing are all case-insensitive.
 export function validateScreenName(name: string): string | null {
   if (typeof name !== "string") return "Screen name is required.";
   if (name.length === 0) return "Screen name is required.";
   if (name.length < 3) return "Screen name must be at least 3 characters.";
   if (name.length > 30) return "Screen name must be 30 characters or fewer.";
-  if (!/^[a-z0-9-]+$/.test(name)) {
-    return "Use only lowercase letters, digits, and hyphens.";
+  if (!/^[A-Za-z0-9-]+$/.test(name)) {
+    return "Use only letters, digits, and hyphens.";
   }
   if (name.startsWith("-") || name.endsWith("-")) {
     return "Cannot start or end with a hyphen.";
   }
   if (name.includes("--")) return "Cannot contain consecutive hyphens.";
-  if (RESERVED_SCREEN_NAMES.has(name)) return "That name is reserved.";
+  if (RESERVED_SCREEN_NAMES.has(name.toLowerCase())) {
+    return "That name is reserved.";
+  }
   return null;
 }

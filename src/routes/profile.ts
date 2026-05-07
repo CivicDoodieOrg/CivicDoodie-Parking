@@ -97,8 +97,9 @@ profile.get("/screen-name/check", requireAuth, async (c) => {
   if (validationError) {
     return c.json({ available: false, reason: "invalid", message: validationError });
   }
+  // Uniqueness is case-insensitive — "Foo" and "foo" are the same name.
   const taken = await c.env.DB.prepare(
-    `SELECT 1 FROM "user" WHERE screen_name = ?`
+    `SELECT 1 FROM "user" WHERE screen_name = ? COLLATE NOCASE`
   )
     .bind(name)
     .first();

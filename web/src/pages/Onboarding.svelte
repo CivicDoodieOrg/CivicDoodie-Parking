@@ -11,11 +11,12 @@
   let suggesting = $state(false);
   let submitError = $state<string | null>(null);
 
-  // Force lowercase + strip whitespace as the user types so what they see is
-  // exactly what gets submitted (no surprise transformation on submit).
+  // Strip whitespace as the user types so what they see is exactly what gets
+  // submitted. Case is preserved — uniqueness and lookups are case-insensitive
+  // server-side, so the user's chosen case shows up wherever their handle does.
   function onInput(e: Event) {
     const t = e.target as HTMLInputElement;
-    const cleaned = t.value.toLowerCase().replace(/\s+/g, "");
+    const cleaned = t.value.replace(/\s+/g, "");
     if (cleaned !== t.value) t.value = cleaned;
     candidate = cleaned;
   }
@@ -110,7 +111,7 @@
         autocapitalize="off"
         spellcheck="false"
         maxlength="30"
-        placeholder="lowercase letters, digits, hyphens"
+        placeholder="letters, digits, hyphens"
       />
       <button
         type="button"
