@@ -43,6 +43,34 @@ function single(v: unknown): string {
   return "";
 }
 
+// Profile-complete gate — required before any user-generated contribution
+// (filing, voting, reporting, commenting). Returns an error string or null.
+async function profileGate(db: D1Database, userId: string): Promise<string | null> {
+  const row = await db
+    .prepare(
+      `SELECT screen_name, country, terms_accepted_at FROM "user" WHERE id = ?`
+    )
+    .bind(userId)
+    .first<{
+      screen_name: string | null;
+      country: string | null;
+      terms_accepted_at: string | null;
+    }>();
+  if (!row?.screen_name) return "Pick a screen name first.";
+  if (!row.country) return "Set your country before contributing.";
+  if (!row.terms_accepted_at)
+    return "Accept the Terms of Service before contributing.";
+  return null;
+}
+
+function ipOf(c: { req: { header: (n: string) => string | undefined } }): string | null {
+  return (
+    c.req.header("cf-connecting-ip") ||
+    c.req.header("x-forwarded-for") ||
+    null
+  );
+}
+
 async function loadTown(db: D1Database, slug: string) {
   return db
     .prepare(`SELECT id, slug, name, state_or_region, country FROM town WHERE slug = ?`)
@@ -142,28 +170,8 @@ doodies.post("/", requireAuth, async (c) => {
   const town = await loadTown(c.env.DB, townSlug);
   if (!town) return c.json({ error: "Town not found" }, 404);
 
-  // Profile completeness gate.
-  const userRow = await c.env.DB.prepare(
-    `SELECT screen_name, country, terms_accepted_at FROM "user" WHERE id = ?`
-  )
-    .bind(user.id)
-    .first<{
-      screen_name: string | null;
-      country: string | null;
-      terms_accepted_at: string | null;
-    }>();
-  if (!userRow?.screen_name) {
-    return c.json({ error: "Pick a screen name first." }, 412);
-  }
-  if (!userRow.country) {
-    return c.json({ error: "Set your country before filing a Doodie." }, 412);
-  }
-  if (!userRow.terms_accepted_at) {
-    return c.json(
-      { error: "Accept the Terms of Service before filing a Doodie." },
-      412
-    );
-  }
+  const gateError = await profileGate(c.env.DB, user.id);
+  if (gateError) return c.json({ error: gateError }, 412);
 
   // Parse multipart body.
   const body = await c.req.parseBody({ all: true });
@@ -596,6 +604,170 @@ doodies.delete("/:doodieSlug", requireAuth, async (c) => {
 
   // Best-effort R2 cleanup; orphans are cheap if it fails.
   await deleteImages(c.env.IMAGES, r2Keys);
+
+  return c.json({ ok: true });
+});
+
+// POST /:doodieSlug/vote — up / down / null (toggle off) ----------------
+// Body: { vote: "up" | "down" | null }
+// Counts on the doodie row are maintained denormalized in the same batch as
+// the vote insert/update/delete so they never drift.
+
+doodies.post("/:doodieSlug/vote", requireAuth, async (c) => {
+  const user = c.get("user");
+  const townSlug = c.req.param("townSlug")!;
+  const doodieSlug = c.req.param("doodieSlug")!;
+  const town = await loadTown(c.env.DB, townSlug);
+  if (!town) return c.json({ error: "Not found" }, 404);
+  const doodie = await loadDoodie(c.env.DB, town.id, doodieSlug);
+  if (!doodie) return c.json({ error: "Not found" }, 404);
+
+  const admin = isAdmin(user, c.env.ADMIN_USER_IDS);
+  if (!canSeeDoodie(user.id, doodie, admin)) {
+    return c.json({ error: "Not found" }, 404);
+  }
+  if (doodie.reporter_id === user.id) {
+    return c.json({ error: "Cannot vote on your own Doodie." }, 400);
+  }
+  if (doodie.moderation_status !== "approved") {
+    return c.json({ error: "Voting is only allowed on approved Doodies." }, 400);
+  }
+
+  const gateError = await profileGate(c.env.DB, user.id);
+  if (gateError) return c.json({ error: gateError }, 412);
+
+  const body = await c.req
+    .json<{ vote?: unknown }>()
+    .catch(() => ({}) as { vote?: unknown });
+  const requested = body.vote;
+  if (
+    requested !== "up" &&
+    requested !== "down" &&
+    requested !== null &&
+    requested !== undefined
+  ) {
+    return c.json({ error: 'vote must be "up", "down", or null' }, 400);
+  }
+  const newVote: "up" | "down" | null =
+    requested === "up" || requested === "down" ? requested : null;
+
+  const existing = await c.env.DB.prepare(
+    `SELECT vote_type FROM doodie_vote WHERE doodie_id = ? AND user_id = ?`
+  )
+    .bind(doodie.id, user.id)
+    .first<{ vote_type: "up" | "down" }>();
+  const oldVote: "up" | "down" | null = existing?.vote_type ?? null;
+
+  // Idempotent no-op.
+  if (oldVote === newVote) {
+    return c.json({
+      vote: newVote,
+      upvotes_count: doodie.upvotes_count,
+      downvotes_count: doodie.downvotes_count,
+    });
+  }
+
+  const upDelta =
+    (newVote === "up" ? 1 : 0) - (oldVote === "up" ? 1 : 0);
+  const downDelta =
+    (newVote === "down" ? 1 : 0) - (oldVote === "down" ? 1 : 0);
+
+  const stmts = [];
+  if (newVote === null) {
+    stmts.push(
+      c.env.DB.prepare(
+        `DELETE FROM doodie_vote WHERE doodie_id = ? AND user_id = ?`
+      ).bind(doodie.id, user.id)
+    );
+  } else if (oldVote === null) {
+    stmts.push(
+      c.env.DB.prepare(
+        `INSERT INTO doodie_vote (doodie_id, user_id, vote_type) VALUES (?, ?, ?)`
+      ).bind(doodie.id, user.id, newVote)
+    );
+  } else {
+    stmts.push(
+      c.env.DB.prepare(
+        `UPDATE doodie_vote SET vote_type = ?, created_at = datetime('now')
+         WHERE doodie_id = ? AND user_id = ?`
+      ).bind(newVote, doodie.id, user.id)
+    );
+  }
+  stmts.push(
+    c.env.DB.prepare(
+      `UPDATE doodie SET upvotes_count = upvotes_count + ?,
+                          downvotes_count = downvotes_count + ?,
+                          updated_at = datetime('now')
+       WHERE id = ?`
+    ).bind(upDelta, downDelta, doodie.id)
+  );
+  await c.env.DB.batch(stmts);
+
+  // TODO(phase 5): award/penalize Brownie Points to doodie.reporter_id based
+  // on (newVote, oldVote). Defer until karma rules are nailed down.
+
+  return c.json({
+    vote: newVote,
+    upvotes_count: doodie.upvotes_count + upDelta,
+    downvotes_count: doodie.downvotes_count + downDelta,
+  });
+});
+
+// POST /:doodieSlug/report — file an abuse report --------------------
+// Body: { reason: string (1-100), details?: string (<=1000) }
+// Allows duplicate reports — abuse caught by the rate-limit (5/hr per user).
+// Audit log is written too so the doodie's history shows the report event.
+
+doodies.post("/:doodieSlug/report", requireAuth, async (c) => {
+  const user = c.get("user");
+  const townSlug = c.req.param("townSlug")!;
+  const doodieSlug = c.req.param("doodieSlug")!;
+  const town = await loadTown(c.env.DB, townSlug);
+  if (!town) return c.json({ error: "Not found" }, 404);
+  const doodie = await loadDoodie(c.env.DB, town.id, doodieSlug);
+  if (!doodie) return c.json({ error: "Not found" }, 404);
+
+  const admin = isAdmin(user, c.env.ADMIN_USER_IDS);
+  if (!canSeeDoodie(user.id, doodie, admin)) {
+    return c.json({ error: "Not found" }, 404);
+  }
+  if (doodie.reporter_id === user.id) {
+    return c.json({ error: "Cannot report your own Doodie." }, 400);
+  }
+
+  const gateError = await profileGate(c.env.DB, user.id);
+  if (gateError) return c.json({ error: gateError }, 412);
+
+  const body = await c.req
+    .json<{ reason?: unknown; details?: unknown }>()
+    .catch(() => ({}) as Record<string, unknown>);
+  const reason =
+    typeof body.reason === "string" ? body.reason.trim().slice(0, 100) : "";
+  if (reason.length === 0) {
+    return c.json({ error: "reason is required" }, 400);
+  }
+  const details =
+    typeof body.details === "string" ? body.details.trim().slice(0, 1000) : null;
+
+  const ip = ipOf(c);
+  const reportId = crypto.randomUUID();
+
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO report (id, target_type, target_id, reporter_id, reason, details, ip_address)
+       VALUES (?, 'doodie', ?, ?, ?, ?, ?)`
+    ).bind(reportId, doodie.id, user.id, reason, details, ip),
+    c.env.DB.prepare(
+      `INSERT INTO doodie_audit (id, doodie_id, actor_id, action, details, ip_address)
+       VALUES (?, ?, ?, 'reported', ?, ?)`
+    ).bind(
+      crypto.randomUUID(),
+      doodie.id,
+      user.id,
+      JSON.stringify({ report_id: reportId, reason }),
+      ip
+    ),
+  ]);
 
   return c.json({ ok: true });
 });
