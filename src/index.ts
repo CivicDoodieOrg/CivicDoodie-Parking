@@ -4,6 +4,7 @@ import { createAuth, type AuthEnv } from "./auth";
 import { rateLimit } from "./middleware/rate-limit";
 import { profile } from "./routes/profile";
 import { towns } from "./routes/towns";
+import { doodies } from "./routes/doodies";
 
 type Bindings = AuthEnv & {
   DB: D1Database;
@@ -34,6 +35,7 @@ app.get("/api/health", (c) => {
 
 app.route("/api/profile", profile);
 app.route("/api/towns", towns);
+app.route("/api/towns/:townSlug/doodies", doodies);
 
 app.all("/api/auth/*", async (c) => {
   const auth = createAuth(c.env.DB, c.env);

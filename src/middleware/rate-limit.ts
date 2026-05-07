@@ -64,20 +64,19 @@ interface RateLimitRule {
 // First match wins — order specific rules before catch-alls.
 const rules: RateLimitRule[] = [
   // Reports — tight, abuse prevention.
-  { pattern: /^\/api\/doodies\/[^/]+\/report$/,            method: "POST", limit: 5,  windowMs: 3_600_000, keyType: "user" },
-  { pattern: /^\/api\/comments\/[^/]+\/report$/,           method: "POST", limit: 5,  windowMs: 3_600_000, keyType: "user" },
+  { pattern: /^\/api\/towns\/[^/]+\/doodies\/[^/]+\/report$/,    method: "POST", limit: 5,   windowMs: 3_600_000, keyType: "user" },
+  { pattern: /^\/api\/comments\/[^/]+\/report$/,                 method: "POST", limit: 5,   windowMs: 3_600_000, keyType: "user" },
   // Doodie creation — moderate (real reports take time to file).
-  { pattern: /^\/api\/towns\/[^/]+\/doodies$/,             method: "POST", limit: 10, windowMs: 3_600_000, keyType: "user" },
+  { pattern: /^\/api\/towns\/[^/]+\/doodies$/,                   method: "POST", limit: 10,  windowMs: 3_600_000, keyType: "user" },
   // Comments — chatty but bounded.
-  { pattern: /^\/api\/doodies\/[^/]+\/comments$/,          method: "POST", limit: 30, windowMs: 60_000,    keyType: "user" },
+  { pattern: /^\/api\/towns\/[^/]+\/doodies\/[^/]+\/comments$/,  method: "POST", limit: 30,  windowMs: 60_000,    keyType: "user" },
   // Votes — users may bulk-vote browsing the dashboard.
-  { pattern: /^\/api\/doodies\/[^/]+\/vote$/,              method: "POST", limit: 60, windowMs: 60_000,    keyType: "user" },
-  { pattern: /^\/api\/comments\/[^/]+\/vote$/,             method: "POST", limit: 60, windowMs: 60_000,    keyType: "user" },
+  { pattern: /^\/api\/towns\/[^/]+\/doodies\/[^/]+\/vote$/,      method: "POST", limit: 60,  windowMs: 60_000,    keyType: "user" },
+  { pattern: /^\/api\/comments\/[^/]+\/vote$/,                   method: "POST", limit: 60,  windowMs: 60_000,    keyType: "user" },
   // Screen-name checks — onboarding form may fire several debounced calls.
-  { pattern: /^\/api\/profile\/screen-name\/check$/,       method: "GET",  limit: 60, windowMs: 60_000,    keyType: "ip" },
-  // Public reads — generous.
-  { pattern: /^\/api\/towns/,                              method: "GET",  limit: 120, windowMs: 60_000,   keyType: "ip" },
-  { pattern: /^\/api\/doodies\//,                          method: "GET",  limit: 120, windowMs: 60_000,   keyType: "ip" },
+  { pattern: /^\/api\/profile\/screen-name\/check$/,             method: "GET",  limit: 60,  windowMs: 60_000,    keyType: "ip" },
+  // Public reads — generous (covers towns list/detail, doodies list/detail, image fetches).
+  { pattern: /^\/api\/towns/,                                    method: "GET",  limit: 240, windowMs: 60_000,    keyType: "ip" },
   // Catch-all for writes (POST/PUT/PATCH/DELETE on /api/*).
   { pattern: /^\/api\//, limit: 30, windowMs: 60_000, keyType: "user" },
 ];
