@@ -1,0 +1,27 @@
+{
+  "name": "civicdoodie-parking-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "i18n:extract": "lingui extract",
+    "i18n:compile": "lingui compile",
+    "i18n": "npm run i18n:extract && npm run i18n:compile"
+  },
+  "dependencies": {
+    "@lingui/cli": "^5.9.2",
+    "@lingui/core": "^5.9.2",
+    "@lingui/vite-plugin": "^5.9.2",
+    "maplibre-gl": "^4.7.0",
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "@typescript-eslint/types": "^8.57.0",
+    "svelte-check": "^4.0.0",
+    "typescript": "^5.5.0",
+    "vite": "^6.0.0"
+  }
+}
