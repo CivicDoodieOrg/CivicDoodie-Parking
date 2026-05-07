@@ -38,9 +38,6 @@
       <dt>Screen name</dt>
       <dd class="mono">{user.screen_name ?? "—"}</dd>
 
-      <dt>Display name</dt>
-      <dd>{user.name}</dd>
-
       <dt>Brownie Points</dt>
       <dd>{user.brownie_points}</dd>
 
@@ -85,6 +82,9 @@
       </p>
     </header>
     <dl>
+      <dt>Display name</dt>
+      <dd>{user.name}</dd>
+
       <dt>Email</dt>
       <dd class="mono">{user.email}</dd>
 
