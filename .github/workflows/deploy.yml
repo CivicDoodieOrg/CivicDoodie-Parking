@@ -28,10 +28,15 @@ jobs:
           node-version: "22"
       - run: npm ci
       - run: cd web && npm ci && npm run build
+      - name: Generate wrangler.deploy.json
+        env:
+          STAGING_D1_DATABASE_ID: ${{ secrets.STAGING_D1_DATABASE_ID }}
+          PROD_D1_DATABASE_ID: ${{ secrets.PROD_D1_DATABASE_ID }}
+        run: node scripts/build-wrangler-deploy.mjs
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          command: deploy --env staging
+          command: deploy --config wrangler.deploy.json --env staging
 
   deploy-production:
     needs: preflight
@@ -44,7 +49,12 @@ jobs:
           node-version: "22"
       - run: npm ci
       - run: cd web && npm ci && npm run build
+      - name: Generate wrangler.deploy.json
+        env:
+          STAGING_D1_DATABASE_ID: ${{ secrets.STAGING_D1_DATABASE_ID }}
+          PROD_D1_DATABASE_ID: ${{ secrets.PROD_D1_DATABASE_ID }}
+        run: node scripts/build-wrangler-deploy.mjs
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          command: deploy --env prod
+          command: deploy --config wrangler.deploy.json --env prod

@@ -21,51 +21,5 @@
 			"binding": "IMAGES",
 			"bucket_name": "civicdoodie-parking-images-local"
 		}
-	],
-	"env": {
-		"prod": {
-			"name": "civicdoodie-parking",
-			"routes": [
-				{
-					"pattern": "parking.civicdoodie.org",
-					"custom_domain": true
-				}
-			],
-			"d1_databases": [
-				{
-					"binding": "DB",
-					"database_name": "civicdoodie-parking-db-prod",
-					"database_id": "TODO-fill-in-after-wrangler-d1-create"
-				}
-			],
-			"r2_buckets": [
-				{
-					"binding": "IMAGES",
-					"bucket_name": "civicdoodie-parking-images"
-				}
-			]
-		},
-		"staging": {
-			"name": "civicdoodie-parking-staging",
-			"routes": [
-				{
-					"pattern": "parking-staging.civicdoodie.org",
-					"custom_domain": true
-				}
-			],
-			"d1_databases": [
-				{
-					"binding": "DB",
-					"database_name": "civicdoodie-parking-db-staging",
-					"database_id": "TODO-fill-in-after-wrangler-d1-create"
-				}
-			],
-			"r2_buckets": [
-				{
-					"binding": "IMAGES",
-					"bucket_name": "civicdoodie-parking-images-staging"
-				}
-			]
-		}
-	}
+	]
 }

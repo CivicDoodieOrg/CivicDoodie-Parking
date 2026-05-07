@@ -4,3 +4,4 @@ dist
 .dev.vars
 web/node_modules/
 public/
+wrangler.deploy.json
