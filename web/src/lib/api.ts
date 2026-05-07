@@ -54,6 +54,11 @@ export const api = {
       `/api/profile/screen-name/check?name=${encodeURIComponent(name)}`
     ),
 
+  suggestScreenName: () =>
+    json<{ suggestion: string }>("/api/profile/screen-name/suggest").then(
+      (d) => d.suggestion
+    ),
+
   setScreenName: (screen_name: string) =>
     json<{ ok: boolean; screen_name: string }>("/api/profile/screen-name", {
       method: "POST",

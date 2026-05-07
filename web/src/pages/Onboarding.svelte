@@ -8,6 +8,7 @@
   let candidate = $state(user.screen_name_suggestion ?? "");
   let acknowledged = $state(false);
   let submitting = $state(false);
+  let suggesting = $state(false);
   let submitError = $state<string | null>(null);
 
   // Force lowercase + strip whitespace as the user types so what they see is
@@ -17,6 +18,16 @@
     const cleaned = t.value.toLowerCase().replace(/\s+/g, "");
     if (cleaned !== t.value) t.value = cleaned;
     candidate = cleaned;
+  }
+
+  async function tryAnother() {
+    suggesting = true;
+    try {
+      candidate = await api.suggestScreenName();
+    } catch {
+      // Silently ignore — user can keep typing or try again.
+    }
+    suggesting = false;
   }
 
   // Live availability check (debounced).
@@ -90,16 +101,27 @@
 
   <label class="field">
     <span>Screen name</span>
-    <input
-      type="text"
-      value={candidate}
-      oninput={onInput}
-      autocomplete="off"
-      autocapitalize="off"
-      spellcheck="false"
-      maxlength="30"
-      placeholder="lowercase letters, digits, hyphens"
-    />
+    <div class="input-row">
+      <input
+        type="text"
+        value={candidate}
+        oninput={onInput}
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        maxlength="30"
+        placeholder="lowercase letters, digits, hyphens"
+      />
+      <button
+        type="button"
+        class="suggest"
+        onclick={tryAnother}
+        disabled={suggesting}
+        title="Suggest a fresh random name"
+      >
+        {suggesting ? "…" : "Try another"}
+      </button>
+    </div>
     <span class="status status-{checkResult.state}">
       {#if checkResult.state === "idle"}
         &nbsp;
@@ -176,8 +198,12 @@
     color: var(--text-secondary);
     font-size: 0.875rem;
   }
+  .input-row {
+    display: flex;
+    gap: 0.5rem;
+  }
   input[type="text"] {
-    width: 100%;
+    flex: 1;
     padding: 0.625rem 0.75rem;
     background: var(--bg-secondary);
     color: var(--text-primary);
@@ -189,6 +215,24 @@
   input[type="text"]:focus {
     outline: none;
     border-color: var(--accent);
+  }
+  .suggest {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-hover);
+    border-radius: 4px;
+    padding: 0 0.85rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .suggest:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+  .suggest:disabled {
+    opacity: 0.5;
+    cursor: wait;
   }
   .status {
     display: block;

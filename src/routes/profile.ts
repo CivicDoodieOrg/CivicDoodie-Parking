@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { requireAuth } from "../middleware/auth";
 import type { AuthEnv } from "../auth";
-import { sanitizeScreenName, validateScreenName } from "../lib/slug";
+import { validateScreenName } from "../lib/slug";
+import { generateScreenNameSuggestion } from "../lib/name-generator";
 
 type Env = {
   Bindings: AuthEnv & {
@@ -58,9 +59,8 @@ profile.get("/", requireAuth, async (c) => {
   }));
 
   // Suggest a default screen name (only meaningful when current is null).
-  const suggestion = row?.screen_name
-    ? null
-    : sanitizeScreenName(user.name || "user");
+  // Random adj-noun-num — never derived from the user's real name.
+  const suggestion = row?.screen_name ? null : generateScreenNameSuggestion();
 
   return c.json({
     user: {
@@ -81,6 +81,12 @@ profile.get("/", requireAuth, async (c) => {
       accounts,
     },
   });
+});
+
+// GET /api/profile/screen-name/suggest — fresh random suggestion. Used by the
+// onboarding form's "Try another" button. Doesn't claim or persist anything.
+profile.get("/screen-name/suggest", requireAuth, async (c) => {
+  return c.json({ suggestion: generateScreenNameSuggestion() });
 });
 
 // GET /api/profile/screen-name/check?name=foo — live availability check used
