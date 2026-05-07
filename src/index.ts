@@ -1,7 +1,9 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { Scalar } from "@scalar/hono-api-reference";
 import { createAuth, type AuthEnv } from "./auth";
+import { rateLimit } from "./middleware/rate-limit";
 import { profile } from "./routes/profile";
+import { towns } from "./routes/towns";
 
 type Bindings = AuthEnv & {
   DB: D1Database;
@@ -23,11 +25,15 @@ app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
   description: "Session token from Google or Facebook OAuth",
 });
 
+// Rate limiting on all /api/* routes — applied before any route logic.
+app.use("/api/*", rateLimit);
+
 app.get("/api/health", (c) => {
   return c.json({ status: "ok" });
 });
 
 app.route("/api/profile", profile);
+app.route("/api/towns", towns);
 
 app.all("/api/auth/*", async (c) => {
   const auth = createAuth(c.env.DB, c.env);
