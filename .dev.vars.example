@@ -1,0 +1,20 @@
+# Local development secrets — copy to .dev.vars (gitignored) and fill in.
+# Worker reads these via the env binding when running `wrangler dev`.
+
+# Google OAuth — create credentials at https://console.cloud.google.com/apis/credentials
+# Authorized redirect URI: http://localhost:8787/api/auth/callback/google
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+# Facebook OAuth — create app at https://developers.facebook.com/apps
+# Valid OAuth redirect URI: http://localhost:8787/api/auth/callback/facebook
+FACEBOOK_CLIENT_ID=
+FACEBOOK_CLIENT_SECRET=
+
+# better-auth
+# Generate a secret: openssl rand -base64 32
+BETTER_AUTH_SECRET=
+BETTER_AUTH_URL=http://localhost:8787
+
+# Comma-separated user IDs with admin access (set after first signup).
+ADMIN_USER_IDS=

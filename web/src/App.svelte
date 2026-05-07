@@ -1,63 +1,94 @@
 <script lang="ts">
-  let health = $state<string | null>(null);
-  let error = $state<string | null>(null);
+  import { onMount } from "svelte";
+  import { auth, checkAuth } from "$lib/auth.svelte";
+  import Landing from "./pages/Landing.svelte";
+  import Profile from "./pages/Profile.svelte";
 
-  async function checkHealth() {
-    try {
-      const resp = await fetch("/api/health");
-      const body = await resp.json();
-      health = body.status;
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    }
-  }
+  let path = $state(window.location.pathname);
 
-  $effect(() => {
-    checkHealth();
+  let route = $derived.by(() => {
+    if (path === "/profile") return "profile";
+    return "home";
+  });
+
+  onMount(() => {
+    checkAuth();
+    const handler = () => {
+      path = window.location.pathname;
+    };
+    window.addEventListener("popstate", handler);
+    return () => window.removeEventListener("popstate", handler);
   });
 </script>
 
-<main>
-  <h1>CivicDoodie Parking</h1>
-  <p class="tagline">Report parking-meter, garage, and enforcement issues in your town.</p>
-  <p class="status">
-    API:
-    {#if health}
-      <span class="ok">{health}</span>
-    {:else if error}
-      <span class="err">{error}</span>
-    {:else}
-      checking…
+<header class="topbar">
+  <a href="/" class="brand">CivicDoodie Parking</a>
+  <nav>
+    {#if auth.loading}
+      <span class="muted">…</span>
+    {:else if auth.user}
+      <a href="/profile">{auth.user.name}</a>
     {/if}
-  </p>
-  <p class="version">v{__APP_VERSION__} · {__GIT_REF__}</p>
-</main>
+  </nav>
+</header>
+
+{#if auth.loading}
+  <main class="loading">Loading…</main>
+{:else if route === "profile"}
+  {#if auth.user}
+    <Profile />
+  {:else}
+    <Landing />
+  {/if}
+{:else if auth.user}
+  <main class="placeholder">
+    <h1>Welcome, {auth.user.name}</h1>
+    <p>Town picker and dashboard coming in Phase 2 + 4.</p>
+    <p><a href="/profile">View profile</a></p>
+  </main>
+{:else}
+  <Landing />
+{/if}
+
+<footer class="version">v{__APP_VERSION__} · {__GIT_REF__}</footer>
 
 <style>
-  main {
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .brand {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .brand:hover {
+    text-decoration: none;
+  }
+  nav .muted {
+    color: var(--text-muted);
+  }
+  .loading,
+  .placeholder {
     max-width: 600px;
     margin: 4rem auto;
     padding: 0 1.5rem;
+    text-align: center;
   }
-  h1 {
-    font-size: 2rem;
+  .placeholder h1 {
+    margin-bottom: 1rem;
+  }
+  .placeholder p {
+    color: var(--text-secondary);
     margin-bottom: 0.5rem;
   }
-  .tagline {
-    color: var(--text-secondary);
-    margin-bottom: 2rem;
-  }
-  .status {
-    margin-bottom: 2rem;
-  }
-  .ok {
-    color: var(--green);
-  }
-  .err {
-    color: var(--red);
-  }
   .version {
+    position: fixed;
+    bottom: 0.75rem;
+    right: 1rem;
     color: var(--text-muted);
-    font-size: 0.875rem;
+    font-size: 0.75rem;
   }
 </style>

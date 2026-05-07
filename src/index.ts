@@ -1,15 +1,11 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { Scalar } from "@scalar/hono-api-reference";
+import { createAuth, type AuthEnv } from "./auth";
+import { profile } from "./routes/profile";
 
-type Bindings = {
+type Bindings = AuthEnv & {
   DB: D1Database;
   IMAGES: R2Bucket;
-  GOOGLE_CLIENT_ID: string;
-  GOOGLE_CLIENT_SECRET: string;
-  FACEBOOK_CLIENT_ID: string;
-  FACEBOOK_CLIENT_SECRET: string;
-  BETTER_AUTH_SECRET: string;
-  BETTER_AUTH_URL: string;
   ADMIN_USER_IDS: string;
 };
 
@@ -28,6 +24,13 @@ app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
 
 app.get("/api/health", (c) => {
   return c.json({ status: "ok" });
+});
+
+app.route("/api/profile", profile);
+
+app.all("/api/auth/*", async (c) => {
+  const auth = createAuth(c.env.DB, c.env);
+  return auth.handler(c.req.raw);
 });
 
 app.doc("/api/openapi.json", {
