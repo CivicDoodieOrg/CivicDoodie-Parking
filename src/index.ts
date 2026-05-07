@@ -8,6 +8,7 @@ import { doodies } from "./routes/doodies";
 import { doodieComments, comments } from "./routes/comments";
 import { dashboard } from "./routes/dashboard";
 import { admin } from "./routes/admin";
+import * as openapiRoutes from "./openapi-routes";
 
 type Bindings = AuthEnv & {
   DB: D1Database;
@@ -48,6 +49,12 @@ app.all("/api/auth/*", async (c) => {
   const auth = createAuth(c.env.DB, c.env);
   return auth.handler(c.req.raw);
 });
+
+// Register every exported route declaration with the OpenAPI registry.
+// These are documentation-only — actual handlers live in src/routes/*.
+for (const route of Object.values(openapiRoutes)) {
+  app.openAPIRegistry.registerPath(route);
+}
 
 app.doc("/api/openapi.json", {
   openapi: "3.1.0",
