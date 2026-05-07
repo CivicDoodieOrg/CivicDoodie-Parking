@@ -2,7 +2,6 @@ import { betterAuth } from "better-auth";
 import { bearer } from "better-auth/plugins";
 import { Kysely } from "kysely";
 import { D1Dialect } from "kysely-d1";
-import { generateSlug, sanitizeScreenName } from "./lib/slug";
 
 export type AuthEnv = {
   GOOGLE_CLIENT_ID: string;
@@ -52,28 +51,10 @@ export function createAuth(d1: D1Database, env: AuthEnv) {
       },
     },
     plugins: [bearer()],
-    databaseHooks: {
-      user: {
-        create: {
-          after: async (user) => {
-            const baseScreenName = sanitizeScreenName(user.name || "user");
-            let finalScreenName = baseScreenName;
-            for (let attempt = 0; attempt < 5; attempt++) {
-              const existing = await d1
-                .prepare('SELECT 1 FROM "user" WHERE screen_name = ?')
-                .bind(finalScreenName)
-                .first();
-              if (!existing) break;
-              finalScreenName = baseScreenName + "-" + generateSlug().slice(0, 4);
-            }
-            await d1
-              .prepare('UPDATE "user" SET screen_name = ? WHERE id = ?')
-              .bind(finalScreenName, user.id)
-              .run();
-          },
-        },
-      },
-    },
+    // Note: screen_name is intentionally NOT auto-set here. New users have
+    // screen_name = NULL after first sign-in and must pick one via the
+    // onboarding flow (POST /api/profile/screen-name). Once set, it's
+    // immutable — see /api/profile/screen-name handler for enforcement.
   });
 }
 

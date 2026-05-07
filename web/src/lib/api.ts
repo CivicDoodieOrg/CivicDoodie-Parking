@@ -1,4 +1,4 @@
-import type { SessionResponse, User } from "./types";
+import type { ScreenNameCheck, SessionResponse, User } from "./types";
 
 async function json<T>(url: string, opts?: RequestInit): Promise<T> {
   const resp = await fetch(url, {
@@ -47,6 +47,18 @@ export const api = {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(fields),
+    }),
+
+  checkScreenName: (name: string) =>
+    json<ScreenNameCheck>(
+      `/api/profile/screen-name/check?name=${encodeURIComponent(name)}`
+    ),
+
+  setScreenName: (screen_name: string) =>
+    json<{ ok: boolean; screen_name: string }>("/api/profile/screen-name", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ screen_name }),
     }),
 
   acceptTerms: () =>

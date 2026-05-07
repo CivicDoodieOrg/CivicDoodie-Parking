@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { requireAuth } from "../middleware/auth";
 import type { AuthEnv } from "../auth";
+import { sanitizeScreenName, validateScreenName } from "../lib/slug";
 
 type Env = {
   Bindings: AuthEnv & {
@@ -17,12 +18,16 @@ type Env = {
 
 export const profile = new Hono<Env>();
 
-// GET /api/profile — current user (no email/IP exposed)
+// GET /api/profile — full profile for the signed-in user.
+// Includes private fields (email, linked OAuth accounts) — caller is the user
+// themselves, so safe to expose. Public-facing user data lives at
+// /api/users/:screen_name (separate, redacted).
 profile.get("/", requireAuth, async (c) => {
   const user = c.get("user");
 
   const row = await c.env.DB.prepare(
-    `SELECT screen_name, city, state_or_region, country, brownie_points, status, terms_accepted_at
+    `SELECT screen_name, city, state_or_region, country, brownie_points,
+            status, terms_accepted_at, createdAt
      FROM "user" WHERE id = ?`
   )
     .bind(user.id)
@@ -34,26 +39,117 @@ profile.get("/", requireAuth, async (c) => {
       brownie_points: number;
       status: string;
       terms_accepted_at: string | null;
+      createdAt: string;
     }>();
+
+  // All linked OAuth accounts (provider + provider's account ID).
+  const accountRows = await c.env.DB.prepare(
+    `SELECT providerId, accountId, createdAt
+     FROM "account" WHERE userId = ?
+     ORDER BY createdAt ASC`
+  )
+    .bind(user.id)
+    .all<{ providerId: string; accountId: string; createdAt: string }>();
+
+  const accounts = (accountRows.results ?? []).map((r) => ({
+    provider: r.providerId,
+    account_id: r.accountId,
+    linked_at: r.createdAt,
+  }));
+
+  // Suggest a default screen name (only meaningful when current is null).
+  const suggestion = row?.screen_name
+    ? null
+    : sanitizeScreenName(user.name || "user");
 
   return c.json({
     user: {
       id: user.id,
       name: user.name,
+      email: user.email,
       image: user.image ?? null,
       screen_name: row?.screen_name ?? null,
+      screen_name_suggestion: suggestion,
       city: row?.city ?? null,
       state_or_region: row?.state_or_region ?? null,
       country: row?.country ?? null,
       brownie_points: row?.brownie_points ?? 0,
       status: row?.status ?? "active",
       terms_accepted_at: row?.terms_accepted_at ?? null,
-      profile_complete: Boolean(row?.country && row?.terms_accepted_at),
+      created_at: row?.createdAt ?? null,
+      profile_complete: Boolean(row?.screen_name && row?.country && row?.terms_accepted_at),
+      accounts,
     },
   });
 });
 
-// PATCH /api/profile — set city / state / country (the post-OAuth completion step)
+// GET /api/profile/screen-name/check?name=foo — live availability check used
+// by the onboarding form. Returns 200 always; the body indicates the verdict.
+profile.get("/screen-name/check", requireAuth, async (c) => {
+  const name = (c.req.query("name") ?? "").trim();
+  const validationError = validateScreenName(name);
+  if (validationError) {
+    return c.json({ available: false, reason: "invalid", message: validationError });
+  }
+  const taken = await c.env.DB.prepare(
+    `SELECT 1 FROM "user" WHERE screen_name = ?`
+  )
+    .bind(name)
+    .first();
+  if (taken) {
+    return c.json({ available: false, reason: "taken", message: "Already in use." });
+  }
+  return c.json({ available: true });
+});
+
+// POST /api/profile/screen-name — one-time set, immutable thereafter.
+// Body: { screen_name: string }
+profile.post("/screen-name", requireAuth, async (c) => {
+  const user = c.get("user");
+  const body = await c.req
+    .json<{ screen_name?: unknown }>()
+    .catch(() => ({}) as { screen_name?: unknown });
+  const requested =
+    typeof body.screen_name === "string" ? body.screen_name.trim() : "";
+
+  const validationError = validateScreenName(requested);
+  if (validationError) {
+    return c.json({ error: validationError }, 400);
+  }
+
+  // Check immutability: reject if user already has one set.
+  const current = await c.env.DB.prepare(
+    `SELECT screen_name FROM "user" WHERE id = ?`
+  )
+    .bind(user.id)
+    .first<{ screen_name: string | null }>();
+  if (current?.screen_name) {
+    return c.json(
+      { error: "Screen name is already set and cannot be changed." },
+      409
+    );
+  }
+
+  // Try to claim it. UNIQUE constraint catches concurrent claims.
+  try {
+    await c.env.DB.prepare(
+      `UPDATE "user" SET screen_name = ?, updatedAt = datetime('now') WHERE id = ?`
+    )
+      .bind(requested, user.id)
+      .run();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("UNIQUE") || msg.includes("constraint")) {
+      return c.json({ error: "Already in use." }, 409);
+    }
+    throw e;
+  }
+
+  return c.json({ ok: true, screen_name: requested });
+});
+
+// PATCH /api/profile — set city / state / country (post-OAuth completion step).
+// Note: does NOT touch screen_name; that has its own endpoint.
 profile.patch("/", requireAuth, async (c) => {
   const user = c.get("user");
   const body = await c.req.json<{
@@ -79,7 +175,7 @@ profile.patch("/", requireAuth, async (c) => {
   return c.json({ ok: true });
 });
 
-// POST /api/profile/accept-terms — record ToS acceptance
+// POST /api/profile/accept-terms — record ToS acceptance.
 profile.post("/accept-terms", requireAuth, async (c) => {
   const user = c.get("user");
   await c.env.DB.prepare(
