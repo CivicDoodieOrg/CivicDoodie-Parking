@@ -2,27 +2,32 @@
   import { onMount } from "svelte";
   import { auth, checkAuth } from "$lib/auth.svelte";
   import { api } from "$lib/api";
+  import { router, navigate, onLinkClick } from "$lib/router.svelte";
   import type { User } from "$lib/types";
   import Landing from "./pages/Landing.svelte";
   import Onboarding from "./pages/Onboarding.svelte";
   import Profile from "./pages/Profile.svelte";
+  import TownDashboard from "./pages/TownDashboard.svelte";
+  import TownPicker from "./components/TownPicker.svelte";
 
-  let path = $state(window.location.pathname);
   let profile = $state<User | null>(null);
   let profileError = $state<string | null>(null);
   let profileLoading = $state(false);
 
-  let route = $derived.by(() => {
-    if (path === "/profile") return "profile";
-    if (path === "/onboarding") return "onboarding";
-    return "home";
-  });
+  type Route =
+    | { kind: "home" }
+    | { kind: "profile" }
+    | { kind: "onboarding" }
+    | { kind: "town"; townSlug: string };
 
-  function navigate(to: string) {
-    if (to === window.location.pathname) return;
-    window.history.pushState({}, "", to);
-    path = to;
-  }
+  let route: Route = $derived.by<Route>(() => {
+    const p = router.path;
+    if (p === "/profile") return { kind: "profile" };
+    if (p === "/onboarding") return { kind: "onboarding" };
+    const m = p.match(/^\/town\/([^/]+)\/?$/);
+    if (m) return { kind: "town", townSlug: m[1] };
+    return { kind: "home" };
+  });
 
   async function loadProfile() {
     profileLoading = true;
@@ -35,22 +40,26 @@
     profileLoading = false;
   }
 
-  // When signed-in but screen_name is missing, force-route to /onboarding.
-  // (Doing this in an effect — runs on auth change and on profile change.)
+  // Force-route signed-in users without a screen_name to /onboarding.
   $effect(() => {
-    if (auth.user && profile && !profile.screen_name && path !== "/onboarding") {
+    if (
+      auth.user &&
+      profile &&
+      !profile.screen_name &&
+      router.path !== "/onboarding"
+    ) {
       navigate("/onboarding");
     }
   });
 
-  // Inverse: visiting /onboarding when already onboarded → bounce to /profile.
+  // Inverse: hitting /onboarding when already onboarded → bounce to /profile.
   $effect(() => {
-    if (profile?.screen_name && path === "/onboarding") {
+    if (profile?.screen_name && router.path === "/onboarding") {
       navigate("/profile");
     }
   });
 
-  // When auth is established, fetch profile. Clear it on sign-out.
+  // Load profile when auth becomes available; clear on sign-out.
   $effect(() => {
     if (auth.user && !profile && !profileLoading) {
       loadProfile();
@@ -61,30 +70,23 @@
 
   onMount(() => {
     checkAuth();
-    const handler = () => {
-      path = window.location.pathname;
-    };
-    window.addEventListener("popstate", handler);
-    return () => window.removeEventListener("popstate", handler);
   });
 
   function onOnboardingDone() {
-    profile = null; // force refresh from server with new screen_name
+    profile = null;
     navigate("/profile");
   }
 </script>
 
 <header class="topbar">
-  <a href="/" class="brand">CivicDoodie Parking</a>
+  <a href="/" class="brand" onclick={onLinkClick("/")}>CivicDoodie Parking</a>
   <nav>
     {#if auth.loading}
       <span class="muted">…</span>
     {:else if auth.user}
-      {#if profile?.screen_name}
-        <a href="/profile">{profile.screen_name}</a>
-      {:else}
-        <a href="/profile">{auth.user.name}</a>
-      {/if}
+      <a href="/profile" onclick={onLinkClick("/profile")}>
+        {profile?.screen_name ?? auth.user.name}
+      </a>
     {/if}
   </nav>
 </header>
@@ -98,16 +100,13 @@
 {:else if profileError && !profile}
   <main class="loading"><p class="err">{profileError}</p></main>
 {:else if profile && !profile.screen_name}
-  <!-- Forced onboarding: ignore route until screen_name is set. -->
   <Onboarding user={profile} onDone={onOnboardingDone} />
-{:else if route === "profile" && profile}
+{:else if route.kind === "profile" && profile}
   <Profile user={profile} />
+{:else if route.kind === "town"}
+  <TownDashboard townSlug={route.townSlug} />
 {:else}
-  <main class="placeholder">
-    <h1>Welcome, {profile?.screen_name ?? auth.user.name}</h1>
-    <p>Town picker and dashboard coming in Phase 4.</p>
-    <p><a href="/profile">View profile</a></p>
-  </main>
+  <TownPicker />
 {/if}
 
 <footer class="version">v{__APP_VERSION__} · {__GIT_REF__}</footer>
@@ -130,19 +129,11 @@
   nav .muted {
     color: var(--text-muted);
   }
-  .loading,
-  .placeholder {
+  .loading {
     max-width: 600px;
     margin: 4rem auto;
     padding: 0 1.5rem;
     text-align: center;
-  }
-  .placeholder h1 {
-    margin-bottom: 1rem;
-  }
-  .placeholder p {
-    color: var(--text-secondary);
-    margin-bottom: 0.5rem;
   }
   .err {
     color: var(--red);

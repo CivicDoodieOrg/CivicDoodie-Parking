@@ -1,4 +1,11 @@
-import type { ScreenNameCheck, SessionResponse, User } from "./types";
+import type {
+  DoodieListResponse,
+  MapPin,
+  ScreenNameCheck,
+  SessionResponse,
+  Town,
+  User,
+} from "./types";
 
 async function json<T>(url: string, opts?: RequestInit): Promise<T> {
   const resp = await fetch(url, {
@@ -68,4 +75,36 @@ export const api = {
 
   acceptTerms: () =>
     json<{ ok: boolean }>("/api/profile/accept-terms", { method: "POST" }),
+
+  // Towns
+  listTowns: (q?: string) => {
+    const qs = q ? `?q=${encodeURIComponent(q)}` : "";
+    return json<{ towns: Town[] }>(`/api/towns${qs}`).then((d) => d.towns);
+  },
+
+  getTown: (slug: string) =>
+    json<{ town: Town }>(`/api/towns/${encodeURIComponent(slug)}`).then(
+      (d) => d.town
+    ),
+
+  // Doodies
+  listDoodies: (
+    townSlug: string,
+    opts: { sort?: "recent" | "top"; type?: string; page?: number; page_size?: number } = {}
+  ) => {
+    const params = new URLSearchParams();
+    if (opts.sort) params.set("sort", opts.sort);
+    if (opts.type) params.set("type", opts.type);
+    if (opts.page) params.set("page", String(opts.page));
+    if (opts.page_size) params.set("page_size", String(opts.page_size));
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    return json<DoodieListResponse>(
+      `/api/towns/${encodeURIComponent(townSlug)}/doodies${qs}`
+    );
+  },
+
+  getDashboardMap: (townSlug: string) =>
+    json<{ pins: MapPin[] }>(
+      `/api/towns/${encodeURIComponent(townSlug)}/dashboard/map`
+    ).then((d) => d.pins),
 };

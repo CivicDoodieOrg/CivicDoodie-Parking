@@ -37,3 +37,52 @@ export interface SessionResponse {
 export type ScreenNameCheck =
   | { available: true }
   | { available: false; reason: "invalid" | "taken"; message: string };
+
+// ---- Towns / Doodies ------------------------------------------------
+
+export interface Town {
+  id: string;
+  slug: string;
+  name: string;
+  state_or_region: string | null;
+  country: string;
+  lat: number;
+  lng: number;
+}
+
+export type DoodieType = "enforcement" | "meter" | "garage";
+
+export interface DoodieListItem {
+  id: string;
+  slug: string;
+  type: DoodieType;
+  description: string;
+  disability_related: boolean;
+  lat: number | null;
+  lng: number | null;
+  upvotes_count: number;
+  downvotes_count: number;
+  comments_count: number;
+  created_at: string;
+  reporter: { screen_name: string | null };
+  image_count: number;
+  first_image_url: string | null;
+}
+
+export interface DoodieListResponse {
+  doodies: DoodieListItem[];
+  page: number;
+  page_size: number;
+  total: number;
+  sort: "recent" | "top";
+}
+
+export interface MapPin {
+  id: string;
+  slug: string;
+  type: DoodieType;
+  lat: number;
+  lng: number;
+  upvotes_count: number;
+  downvotes_count: number;
+}
