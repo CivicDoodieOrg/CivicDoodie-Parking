@@ -174,10 +174,12 @@ npx wrangler d1 migrations apply DB --local
 
 ## API
 
-Full interactive API documentation is available at [`/api/docs`](https://TODO.com). OpenAPI 3.1 spec at [`/api/openapi.json`](https://TODO.com).
+The API contract is defined declaratively using OpenAPI. The OpenAPI specification is the **authoritative** source of truth for both backend and frontend development.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
+- **Spec Location**: The routes are defined in [src/openapi-routes.ts](src/openapi-routes.ts) using `@hono/zod-openapi` and schemas in [src/schemas.ts](src/schemas.ts).
+- **Interactive Docs**: Run the backend locally (`npm run dev`) and visit `http://localhost:8787/api/docs` to access the Scalar interactive API reference.
+- **Spec JSON**: The raw OpenAPI spec is served at `/api/openapi.json`.
+- **Client Integration**: The Svelte frontend connects to the API using Hono's RPC client (`hc` from `hono/client`) instantiated inside [web/src/lib/api.ts](web/src/lib/api.ts). Because the client is cast to `any` to prevent compiler type pollution from mixed/un-typed endpoints, the strictly-typed `api` facade wrapper in [web/src/lib/api.ts](web/src/lib/api.ts) serves as the type-safe contract for page components. Always align this facade with the backend's OpenAPI definitions.
 
 ## Environments
 

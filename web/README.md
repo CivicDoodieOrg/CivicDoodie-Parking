@@ -57,14 +57,15 @@ Authentication state is kept in `src/lib/auth.svelte.ts` using Svelte 5 Runes.
 - Component state reacts instantly when a user logs in, accept terms, updates their screen name, or signs out.
 
 ### 3. API Communication & OpenAPI Alignment
-All calls to the Hono backend API go through the client wrappers in [web/src/lib/api.ts](file:///Users/evan/projects/CivicDoodie-Parking/web/src/lib/api.ts).
-- **No Generated Client**: Rather than auto-generating the client from the backend `openapi.json` at build time, the frontend uses a clean, manually written fetch wrapper (`api`) for flexibility and control.
-- **Manual Type Alignment**: TypeScript interfaces defined in [web/src/lib/types.ts](file:///Users/evan/projects/CivicDoodie-Parking/web/src/lib/types.ts) mirror the Zod/OpenAPI schemas in [src/schemas.ts](file:///Users/evan/projects/CivicDoodie-Parking/src/schemas.ts).
+All calls to the Hono backend API go through the client wrappers in [web/src/lib/api.ts](src/lib/api.ts).
+- **OpenAPI is Authoritative**: The backend's OpenAPI definition (defined via routes in [src/openapi-routes.ts](../src/openapi-routes.ts) and schemas in [src/schemas.ts](../src/schemas.ts)) is the authoritative contract for all backend-frontend integration.
+- **Hono Client & Facade**: Rather than manually crafting fetch requests or auto-generating a static client, the frontend instantiates Hono's RPC client (`hc` from `hono/client`) in [web/src/lib/api.ts](src/lib/api.ts). However, because the client is cast to `any` to bypass TS compiler noise from untyped endpoints (e.g. BetterAuth routes), components must import the strictly-typed `api` facade wrapper rather than invoking the Hono `client` directly.
+- **Manual Type Alignment**: TypeScript interfaces defined in [web/src/lib/types.ts](src/lib/types.ts) mirror the Zod/OpenAPI schemas in [src/schemas.ts](../src/schemas.ts) via `z.infer`.
 - **Updating the API**: When adding or changing backend routes:
-  1. Add/modify the schema in [src/schemas.ts](file:///Users/evan/projects/CivicDoodie-Parking/src/schemas.ts) and path declaration in [src/openapi-routes.ts](file:///Users/evan/projects/CivicDoodie-Parking/src/openapi-routes.ts).
-  2. Update the corresponding TypeScript models in [web/src/lib/types.ts](file:///Users/evan/projects/CivicDoodie-Parking/web/src/lib/types.ts).
-  3. Implement the fetch method in [web/src/lib/api.ts](file:///Users/evan/projects/CivicDoodie-Parking/web/src/lib/api.ts).
-- **Dev Proxy**: The Vite dev server proxies requests starting with `/api` to the backend worker on `http://localhost:8787` (configured in [web/vite.config.ts](file:///Users/evan/projects/CivicDoodie-Parking/web/vite.config.ts)).
+  1. Add/modify the schema in [src/schemas.ts](../src/schemas.ts) and path declaration in [src/openapi-routes.ts](../src/openapi-routes.ts).
+  2. Update the corresponding TypeScript models in [web/src/lib/types.ts](src/lib/types.ts).
+  3. Implement the RPC invocation in [web/src/lib/api.ts](src/lib/api.ts) under the `api` facade.
+- **Dev Proxy**: The Vite dev server proxies requests starting with `/api` to the backend worker on `http://localhost:8787` (configured in [web/vite.config.ts](vite.config.ts)).
 - **Authorization**: Credentials and cookies are included by default (`credentials: "include"`), and authorization headers are standardized dynamically.
 
 ### 4. Build Output and Serving

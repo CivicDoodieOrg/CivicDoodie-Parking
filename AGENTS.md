@@ -35,6 +35,7 @@ Doodie types: `enforcement`, `meter`, `garage`. Max 4 images per Doodie.
 - **TypeScript everywhere.** No plain `.js` in `src/` or `web/src/`.
 - **Type-safe DB.** Use Kysely; no raw string SQL in route handlers (migrations excepted).
 - **Zod at the edges.** Validate request bodies with Zod schemas in `src/schemas.ts`; reuse them for OpenAPI route definitions.
+- **OpenAPI is authoritative.** The API contract is defined declaratively using `@hono/zod-openapi` in [src/openapi-routes.ts](src/openapi-routes.ts) and [src/schemas.ts](src/schemas.ts). This OpenAPI specification is the authoritative source of truth for both backend and frontend development. The Svelte frontend connects using Hono's RPC client (`hc`) wrapped in a strictly-typed facade in [web/src/lib/api.ts](web/src/lib/api.ts) which must be manually kept in sync with the OpenAPI spec.
 - **Auth middleware.** Protected routes go through `requireAuth` from `src/middleware/auth.ts`. Don't reimplement session lookup inline.
 - **Privacy:** never expose user email in API responses. Screen name + city (optional) + state/country (required) only.
 - **IP addresses** are stored on Doodies and comments for accountability — treat as PII, never return in public API responses.
