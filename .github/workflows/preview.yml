@@ -40,19 +40,28 @@ jobs:
           printf "%s" "${{ secrets.PREVIEW_BETTER_AUTH_SECRET }}" \
             | npx wrangler secret put BETTER_AUTH_SECRET \
               --config wrangler.deploy.json --env preview
-      - name: Smoke test
+      - name: Smoke test (non-blocking)
+        # The deploy step above is the real gate. This step just reports
+        # whether the custom-domain URL is reachable yet. On first-ever deploy
+        # of a hostname, Cloudflare's Universal SSL cert can take 1-15 minutes
+        # to issue; subsequent deploys are instant. Never fail the workflow
+        # on this check.
         run: |
           URL="https://${{ steps.slug.outputs.host }}"
-          for i in 1 2 3 4 5; do
-            if curl --fail --silent --show-error "$URL/" > /dev/null; then
-              echo "Preview ready at $URL" >> "$GITHUB_STEP_SUMMARY"
+          for i in 1 2 3 4 5 6; do
+            if curl --fail --silent --show-error --max-time 5 "$URL/" > /dev/null 2>&1; then
+              echo "✅ Preview ready at $URL" >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
-            echo "Attempt $i failed; sleeping 5s..." >&2
             sleep 5
           done
-          echo "Smoke test failed for $URL" >&2
-          exit 1
+          {
+            echo "⏳ Preview deployed but URL not yet reachable: $URL"
+            echo ""
+            echo "This is normal on first deploy of a new hostname — Cloudflare's"
+            echo "Universal SSL cert can take a few minutes to issue. Try the URL"
+            echo "again in 5-10 minutes."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   delete-preview:
     if: github.event_name == 'delete' && github.event.ref_type == 'branch' && startsWith(github.event.ref, 'web-')
