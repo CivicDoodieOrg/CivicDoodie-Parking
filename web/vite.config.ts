@@ -17,6 +17,7 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __GIT_REF__: JSON.stringify(gitRef),
+    __AUTH_BASE_URL__: JSON.stringify(process.env.AUTH_BASE_URL ?? ""),
   },
   plugins: [svelte()],
   resolve: {

@@ -48,6 +48,27 @@ if (!uuidRe.test(prodId)) {
 const basePath = resolve(repoRoot, "wrangler.json");
 const base = JSON.parse(readFileSync(basePath, "utf-8"));
 
+const previewName = process.env.PREVIEW_NAME;
+const previewHost = process.env.PREVIEW_HOST;
+if (previewName && !previewHost) {
+  console.error("ERROR: PREVIEW_NAME set but PREVIEW_HOST missing.");
+  process.exit(1);
+}
+if (previewHost && !previewName) {
+  console.error("ERROR: PREVIEW_HOST set but PREVIEW_NAME missing.");
+  process.exit(1);
+}
+
+const stagingD1 = {
+  binding: "DB",
+  database_name: "civicdoodie-parking-db-staging",
+  database_id: stagingId,
+};
+const stagingR2 = {
+  binding: "IMAGES",
+  bucket_name: "civicdoodie-parking-images-staging",
+};
+
 const deploy = {
   ...base,
   env: {
@@ -70,20 +91,24 @@ const deploy = {
       routes: [
         { pattern: "parking-staging.civicdoodie.org", custom_domain: true },
       ],
-      d1_databases: [
-        {
-          binding: "DB",
-          database_name: "civicdoodie-parking-db-staging",
-          database_id: stagingId,
-        },
-      ],
-      r2_buckets: [
-        {
-          binding: "IMAGES",
-          bucket_name: "civicdoodie-parking-images-staging",
-        },
-      ],
+      d1_databases: [stagingD1],
+      r2_buckets: [stagingR2],
     },
+    ...(previewName
+      ? {
+          preview: {
+            name: previewName,
+            routes: [{ pattern: previewHost, custom_domain: true }],
+            d1_databases: [stagingD1],
+            r2_buckets: [stagingR2],
+            vars: {
+              BETTER_AUTH_URL: `https://${previewHost}`,
+              AUTH_COOKIE_DOMAIN: ".preview.civicdoodie.org",
+              AUTH_TRUSTED_ORIGINS: "https://auth.preview.civicdoodie.org",
+            },
+          },
+        }
+      : {}),
   },
 };
 

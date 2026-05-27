@@ -5,3 +5,4 @@ dist
 web/node_modules/
 public/
 wrangler.deploy.json
+wrangler.auth-preview.json

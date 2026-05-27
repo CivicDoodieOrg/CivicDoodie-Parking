@@ -1,0 +1,71 @@
+name: Preview
+
+on:
+  push:
+    branches: ["web-**"]
+  delete:
+
+jobs:
+  deploy-preview:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: "24" }
+      - name: Compute slug, worker name, and host
+        id: slug
+        run: node scripts/preview-slug.mjs "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+      - run: npm ci
+      - name: Build web (preview auth base URL)
+        env:
+          AUTH_BASE_URL: https://auth.preview.civicdoodie.org
+        run: cd web && npm ci && npm run build
+      - run: npm run typecheck
+      - name: Generate wrangler.deploy.json
+        env:
+          STAGING_D1_DATABASE_ID: ${{ secrets.STAGING_D1_DATABASE_ID }}
+          PROD_D1_DATABASE_ID:    ${{ secrets.PROD_D1_DATABASE_ID }}
+          PREVIEW_NAME:           ${{ steps.slug.outputs.name }}
+          PREVIEW_HOST:           ${{ steps.slug.outputs.host }}
+        run: node scripts/build-wrangler-deploy.mjs
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: deploy --config wrangler.deploy.json --env preview
+      - name: Seed BETTER_AUTH_SECRET into preview Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          printf "%s" "${{ secrets.PREVIEW_BETTER_AUTH_SECRET }}" \
+            | npx wrangler secret put BETTER_AUTH_SECRET \
+              --config wrangler.deploy.json --env preview
+      - name: Smoke test
+        run: |
+          URL="https://${{ steps.slug.outputs.host }}"
+          for i in 1 2 3 4 5; do
+            if curl --fail --silent --show-error "$URL/" > /dev/null; then
+              echo "Preview ready at $URL" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Attempt $i failed; sleeping 5s..." >&2
+            sleep 5
+          done
+          echo "Smoke test failed for $URL" >&2
+          exit 1
+
+  delete-preview:
+    if: github.event_name == 'delete' && github.event.ref_type == 'branch' && startsWith(github.event.ref, 'web-')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: "24" }
+      - run: npm ci
+      - name: Compute worker name
+        id: slug
+        run: node scripts/preview-slug.mjs "${{ github.event.ref }}" >> "$GITHUB_OUTPUT"
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: delete ${{ steps.slug.outputs.name }}

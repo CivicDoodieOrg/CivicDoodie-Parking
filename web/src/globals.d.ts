@@ -10,6 +10,7 @@ declare global {
   // Global version and git hash variables injected by Vite at build time
   const __APP_VERSION__: string;
   const __GIT_REF__: string;
+  const __AUTH_BASE_URL__: string;
 
   /**
    * Mock of Cloudflare's D1Database interface.

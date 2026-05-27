@@ -1,0 +1,43 @@
+name: Auth Preview Worker Deploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: "24" }
+      - run: npm ci
+      - run: cd web && npm ci && npm run build
+      - name: Hydrate wrangler.auth-preview.json
+        env:
+          STAGING_D1_DATABASE_ID: ${{ secrets.STAGING_D1_DATABASE_ID }}
+        run: |
+          sed "s|__STAGING_D1_DATABASE_ID__|${STAGING_D1_DATABASE_ID}|g" \
+            wrangler.auth-preview.json.template > wrangler.auth-preview.json
+          jq '.vars.AUTH_TRUSTED_ORIGINS = "https://auth.preview.civicdoodie.org,https://*.preview.civicdoodie.org"' \
+            wrangler.auth-preview.json > wrangler.auth-preview.json.tmp
+          mv wrangler.auth-preview.json.tmp wrangler.auth-preview.json
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: deploy --config wrangler.auth-preview.json
+      - name: Seed secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -e
+          for kv in \
+            "BETTER_AUTH_SECRET=${{ secrets.PREVIEW_BETTER_AUTH_SECRET }}" \
+            "GOOGLE_CLIENT_ID=${{ secrets.PREVIEW_GOOGLE_CLIENT_ID }}" \
+            "GOOGLE_CLIENT_SECRET=${{ secrets.PREVIEW_GOOGLE_CLIENT_SECRET }}" \
+            "FACEBOOK_CLIENT_ID=${{ secrets.PREVIEW_FACEBOOK_CLIENT_ID }}" \
+            "FACEBOOK_CLIENT_SECRET=${{ secrets.PREVIEW_FACEBOOK_CLIENT_SECRET }}"; do
+            name="${kv%%=*}"
+            val="${kv#*=}"
+            printf "%s" "$val" \
+              | npx wrangler secret put "$name" --config wrangler.auth-preview.json
+          done

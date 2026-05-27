@@ -4,16 +4,49 @@ import { Kysely } from "kysely";
 import { D1Dialect } from "kysely-d1";
 
 export type AuthEnv = {
-  GOOGLE_CLIENT_ID: string;
-  GOOGLE_CLIENT_SECRET: string;
-  FACEBOOK_CLIENT_ID: string;
-  FACEBOOK_CLIENT_SECRET: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  FACEBOOK_CLIENT_ID?: string;
+  FACEBOOK_CLIENT_SECRET?: string;
   BETTER_AUTH_SECRET: string;
   BETTER_AUTH_URL: string;
+  // Optional: when set, scopes session cookies to a parent domain
+  // (e.g. ".preview.civicdoodie.org") so multiple Workers under that
+  // suffix can share a session. Unset = host-only cookie (default).
+  AUTH_COOKIE_DOMAIN?: string;
+  // Optional: comma-separated list of origins to add to Better Auth's
+  // trustedOrigins list (in addition to the static baseline).
+  AUTH_TRUSTED_ORIGINS?: string;
 };
+
+const STATIC_TRUSTED_ORIGINS = [
+  "http://localhost:5173",
+  "http://localhost:8787",
+  "https://parking.civicdoodie.org",
+  "https://parking-staging.civicdoodie.org",
+];
 
 export function createAuth(d1: D1Database, env: AuthEnv) {
   const db = new Kysely({ dialect: new D1Dialect({ database: d1 }) });
+
+  const socialProviders: Record<string, { clientId: string; clientSecret: string }> = {};
+  if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
+    socialProviders.google = {
+      clientId: env.GOOGLE_CLIENT_ID,
+      clientSecret: env.GOOGLE_CLIENT_SECRET,
+    };
+  }
+  if (env.FACEBOOK_CLIENT_ID && env.FACEBOOK_CLIENT_SECRET) {
+    socialProviders.facebook = {
+      clientId: env.FACEBOOK_CLIENT_ID,
+      clientSecret: env.FACEBOOK_CLIENT_SECRET,
+    };
+  }
+
+  const extraOrigins = (env.AUTH_TRUSTED_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   return betterAuth({
     database: {
@@ -23,27 +56,14 @@ export function createAuth(d1: D1Database, env: AuthEnv) {
     advanced: {
       defaultCookieAttributes: {
         secure: env.BETTER_AUTH_URL.startsWith("https"),
+        ...(env.AUTH_COOKIE_DOMAIN ? { domain: env.AUTH_COOKIE_DOMAIN } : {}),
       },
     },
-    trustedOrigins: [
-      "http://localhost:5173",
-      "http://localhost:8787",
-      "https://parking.civicdoodie.org",
-      "https://parking-staging.civicdoodie.org",
-    ],
+    trustedOrigins: [...STATIC_TRUSTED_ORIGINS, ...extraOrigins],
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
     basePath: "/api/auth",
-    socialProviders: {
-      google: {
-        clientId: env.GOOGLE_CLIENT_ID,
-        clientSecret: env.GOOGLE_CLIENT_SECRET,
-      },
-      facebook: {
-        clientId: env.FACEBOOK_CLIENT_ID,
-        clientSecret: env.FACEBOOK_CLIENT_SECRET,
-      },
-    },
+    socialProviders,
     account: {
       accountLinking: {
         enabled: true,
@@ -51,10 +71,6 @@ export function createAuth(d1: D1Database, env: AuthEnv) {
       },
     },
     plugins: [bearer()],
-    // Note: screen_name is intentionally NOT auto-set here. New users have
-    // screen_name = NULL after first sign-in and must pick one via the
-    // onboarding flow (POST /api/profile/screen-name). Once set, it's
-    // immutable — see /api/profile/screen-name handler for enforcement.
   });
 }
 

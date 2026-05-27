@@ -1,0 +1,29 @@
+{
+  "name": "civicdoodie-parking-auth-preview",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-06-20",
+  "compatibility_flags": ["nodejs_compat"],
+  "routes": [
+    { "pattern": "auth.preview.civicdoodie.org", "custom_domain": true }
+  ],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "civicdoodie-parking-db-staging",
+      "database_id": "__STAGING_D1_DATABASE_ID__"
+    }
+  ],
+  "r2_buckets": [
+    { "binding": "IMAGES", "bucket_name": "civicdoodie-parking-images-staging" }
+  ],
+  "vars": {
+    "BETTER_AUTH_URL": "https://auth.preview.civicdoodie.org",
+    "AUTH_COOKIE_DOMAIN": ".preview.civicdoodie.org",
+    "AUTH_TRUSTED_ORIGINS": "https://auth.preview.civicdoodie.org"
+  }
+}

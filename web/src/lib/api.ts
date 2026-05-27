@@ -38,7 +38,8 @@ export const api = {
 
   signInWith: (provider: "google" | "facebook") => {
     const callbackURL = window.location.origin + "/profile";
-    return fetch("/api/auth/sign-in/social", {
+    const base = __AUTH_BASE_URL__ || "";
+    return fetch(`${base}/api/auth/sign-in/social`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
