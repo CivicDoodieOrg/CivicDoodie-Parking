@@ -38,7 +38,7 @@ describe("slugToWorkerName", () => {
 });
 
 describe("slugToHost", () => {
-  it("appends .preview.civicdoodie.org", () => {
-    expect(slugToHost("web-foo")).toBe("web-foo.preview.civicdoodie.org");
+  it("appends .parking-staging.civicdoodie.org", () => {
+    expect(slugToHost("web-foo")).toBe("web-foo.parking-staging.civicdoodie.org");
   });
 });

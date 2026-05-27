@@ -30,22 +30,36 @@ describe("build-wrangler-deploy", () => {
     expect(cfg.env.preview).toBeUndefined();
   });
 
+  it("staging env carries cookie-domain vars for cross-subdomain sessions", () => {
+    const cfg = run();
+    expect(cfg.env.staging.vars.AUTH_COOKIE_DOMAIN).toBe(
+      ".parking-staging.civicdoodie.org",
+    );
+    expect(cfg.env.staging.vars.AUTH_TRUSTED_ORIGINS).toContain(
+      "*.parking-staging.civicdoodie.org",
+    );
+  });
+
   it("emits a preview env when PREVIEW_NAME and PREVIEW_HOST are set", () => {
     const cfg = run({
       PREVIEW_NAME: "civicdoodie-parking-preview-web-foo",
-      PREVIEW_HOST: "web-foo.preview.civicdoodie.org",
+      PREVIEW_HOST: "web-foo.parking-staging.civicdoodie.org",
     });
     const p = cfg.env.preview;
     expect(p.name).toBe("civicdoodie-parking-preview-web-foo");
     expect(p.routes).toEqual([
-      { pattern: "web-foo.preview.civicdoodie.org", custom_domain: true },
+      { pattern: "web-foo.parking-staging.civicdoodie.org", custom_domain: true },
     ]);
     expect(p.d1_databases[0].database_id).toBe(fakeUuid);
     expect(p.d1_databases[0].database_name).toBe("civicdoodie-parking-db-staging");
     expect(p.r2_buckets[0].bucket_name).toBe("civicdoodie-parking-images-staging");
-    expect(p.vars.AUTH_COOKIE_DOMAIN).toBe(".preview.civicdoodie.org");
-    expect(p.vars.AUTH_TRUSTED_ORIGINS).toContain("auth.preview.civicdoodie.org");
-    expect(p.vars.BETTER_AUTH_URL).toBe("https://web-foo.preview.civicdoodie.org");
+    expect(p.vars.AUTH_COOKIE_DOMAIN).toBe(".parking-staging.civicdoodie.org");
+    expect(p.vars.AUTH_TRUSTED_ORIGINS).toBe(
+      "https://parking-staging.civicdoodie.org",
+    );
+    expect(p.vars.BETTER_AUTH_URL).toBe(
+      "https://web-foo.parking-staging.civicdoodie.org",
+    );
   });
 
   it("fails fast if PREVIEW_NAME is set but PREVIEW_HOST is not", () => {

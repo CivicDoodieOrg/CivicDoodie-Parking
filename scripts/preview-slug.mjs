@@ -6,7 +6,7 @@
 // the slug max is 35.
 
 const PREFIX = "civicdoodie-parking-preview-";
-const HOST_SUFFIX = ".preview.civicdoodie.org";
+const HOST_SUFFIX = ".parking-staging.civicdoodie.org";
 const SLUG_MAX = 35;
 
 export function branchToSlug(branch) {

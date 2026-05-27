@@ -93,6 +93,13 @@ const deploy = {
       ],
       d1_databases: [stagingD1],
       r2_buckets: [stagingR2],
+      vars: {
+        // Cookies are scoped to the parking-staging tree so preview Workers
+        // under <slug>.parking-staging.civicdoodie.org share sessions with
+        // staging. Prod (parking.civicdoodie.org) is outside this scope.
+        AUTH_COOKIE_DOMAIN: ".parking-staging.civicdoodie.org",
+        AUTH_TRUSTED_ORIGINS: "https://*.parking-staging.civicdoodie.org",
+      },
     },
     ...(previewName
       ? {
@@ -103,8 +110,8 @@ const deploy = {
             r2_buckets: [stagingR2],
             vars: {
               BETTER_AUTH_URL: `https://${previewHost}`,
-              AUTH_COOKIE_DOMAIN: ".preview.civicdoodie.org",
-              AUTH_TRUSTED_ORIGINS: "https://auth.preview.civicdoodie.org",
+              AUTH_COOKIE_DOMAIN: ".parking-staging.civicdoodie.org",
+              AUTH_TRUSTED_ORIGINS: "https://parking-staging.civicdoodie.org",
             },
           },
         }

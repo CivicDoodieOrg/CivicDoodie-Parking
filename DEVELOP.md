@@ -187,27 +187,35 @@ The committed `wrangler.json` is local-dev only — IDs aren't in the repo. The 
 
 ## Branch previews
 
-Any push to a branch named `web-*` is automatically deployed to `https://<slug>.preview.civicdoodie.org`, where `<slug>` is the branch name lowercased, with `/` and `_` replaced by `-`, characters outside `[a-z0-9-]` stripped, and truncated to 35 chars.
+Any push to a branch named `web-*` is automatically deployed to `https://<slug>.parking-staging.civicdoodie.org`, where `<slug>` is the branch name lowercased, with `/` and `_` replaced by `-`, characters outside `[a-z0-9-]` stripped, and truncated to 35 chars.
+
+Hostnames live under `*.parking-staging.civicdoodie.org` so they're covered by the existing wildcard cert (Cloudflare Advanced Certificate Manager). SSL is instant on every new preview — no per-hostname provisioning wait.
 
 ### What gets deployed
 
 - A per-branch Cloudflare Worker named `civicdoodie-parking-preview-<slug>`, bound to **staging's** D1 database and R2 bucket. Preview data is staging data — anything you write on a preview is visible on staging and vice versa.
-- Sign-in is handled by a permanent Worker at `auth.preview.civicdoodie.org`. The preview Worker holds `BETTER_AUTH_SECRET` (same value as the auth Worker) so it can validate sessions, but does **not** hold Google or Facebook OAuth secrets.
+- Sign-in is delegated to the staging Worker itself (`parking-staging.civicdoodie.org`). No dedicated auth Worker; previews carry only `BETTER_AUTH_URL` plus cookie/trusted-origin vars.
 
 ### Smoke checklist (after a preview deploys)
 
-1. Open `https://<slug>.preview.civicdoodie.org` — the SPA shell loads.
-2. Click "Sign in with Google". You should land on Google's consent screen, then be redirected back to `https://<slug>.preview.civicdoodie.org/profile`.
-3. DevTools → Application → Cookies: the Better Auth session cookie's `Domain` is `.preview.civicdoodie.org` (note the leading dot).
+1. Open `https://<slug>.parking-staging.civicdoodie.org` — the SPA shell loads.
+2. Click "Sign in with Google". You'll go through Google → land on `parking-staging.civicdoodie.org/api/auth/callback/google` → be redirected back to `https://<slug>.parking-staging.civicdoodie.org/profile`.
+3. DevTools → Application → Cookies: the Better Auth session cookie's `Domain` is `.parking-staging.civicdoodie.org` (note the leading dot).
 4. `GET /api/profile` on the preview origin returns the signed-in user.
 
-### Cross-preview session caveat
+### Shared-session caveat
 
-Because all previews share the `.preview.civicdoodie.org` cookie scope and the same staging session table, **signing in on one preview signs you in on all of them**. Signing out on any preview signs you out everywhere. Don't assume previews are session-isolated when comparing behavior across two `web-*` branches in the same browser profile — use a separate profile or incognito window.
+The session cookie is scoped to `.parking-staging.civicdoodie.org`, which covers every preview AND the staging Worker itself. Concretely:
+
+- Signing in on any preview also signs you in on `parking-staging.civicdoodie.org`, and on every other live preview.
+- Signing out anywhere signs you out everywhere across previews + staging.
+- Prod (`parking.civicdoodie.org`) is outside this scope and is unaffected.
+
+When comparing behavior between two `web-*` branches (or between a preview and staging) in the same browser profile, expect session-bleed. Use an incognito window or a separate browser profile for true isolation.
 
 ### Trust boundary
 
-The preview workflow triggers only on `push` to branches in this repository, so fork PRs can never spin up a preview Worker. Anyone with push access to this repo, however, can deploy arbitrary code that reads/writes staging's D1 and R2. Keep PII out of staging accordingly.
+The preview workflow triggers only on `push` to branches in this repository, so fork PRs can never spin up a preview Worker. Anyone with push access to this repo can, however, deploy arbitrary code that reads/writes staging's D1 and R2. Keep PII out of staging accordingly.
 
 ### Cleanup
 

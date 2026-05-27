@@ -19,7 +19,7 @@ jobs:
       - run: npm ci
       - name: Build web (preview auth base URL)
         env:
-          AUTH_BASE_URL: https://auth.preview.civicdoodie.org
+          AUTH_BASE_URL: https://parking-staging.civicdoodie.org
         run: cd web && npm ci && npm run build
       - run: npm run typecheck
       - name: Generate wrangler.deploy.json
