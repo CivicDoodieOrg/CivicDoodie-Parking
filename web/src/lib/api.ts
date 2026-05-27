@@ -1,3 +1,5 @@
+import { hc } from "hono/client";
+import type { AppType } from "../../../src/index";
 import type {
   DoodieListResponse,
   MapPin,
@@ -7,19 +9,20 @@ import type {
   User,
 } from "./types";
 
-async function json<T>(url: string, opts?: RequestInit): Promise<T> {
-  const resp = await fetch(url, {
-    credentials: "include",
-    ...opts,
-  });
+const client: any = hc<any>("/");
+
+async function handleResponse<T>(respPromise: Promise<Response>): Promise<T> {
+  const resp = await respPromise;
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({}));
     throw new Error((body as { error?: string }).error || `HTTP ${resp.status}`);
   }
-  return resp.json();
+  return resp.json() as Promise<T>;
 }
 
 export const api = {
+  // ---- Better Auth (Wildcard/external route, no typed Hono route) ---
+
   getSession: (): Promise<SessionResponse | null> =>
     fetch("/api/auth/get-session", { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
@@ -47,64 +50,80 @@ export const api = {
       });
   },
 
-  getProfile: () => json<{ user: User }>("/api/profile").then((d) => d.user),
+  // ---- Profile / User ----------------------------------------------
+
+  getProfile: () =>
+    handleResponse<{ user: User }>(client.api.profile.$get()).then((d) => d.user),
 
   updateProfile: (fields: { city?: string | null; state_or_region?: string | null; country?: string | null }) =>
-    json<{ ok: boolean }>("/api/profile", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(fields),
-    }),
+    handleResponse<{ ok: boolean }>(
+      client.api.profile.$patch({
+        json: fields,
+      })
+    ),
 
   checkScreenName: (name: string) =>
-    json<ScreenNameCheck>(
-      `/api/profile/screen-name/check?name=${encodeURIComponent(name)}`
+    handleResponse<ScreenNameCheck>(
+      client.api.profile["screen-name"].check.$get({
+        query: { name },
+      })
     ),
 
   suggestScreenName: () =>
-    json<{ suggestion: string }>("/api/profile/screen-name/suggest").then(
-      (d) => d.suggestion
-    ),
+    handleResponse<{ suggestion: string }>(
+      client.api.profile["screen-name"].suggest.$get()
+    ).then((d) => d.suggestion),
 
   setScreenName: (screen_name: string) =>
-    json<{ ok: boolean; screen_name: string }>("/api/profile/screen-name", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ screen_name }),
-    }),
-
-  acceptTerms: () =>
-    json<{ ok: boolean }>("/api/profile/accept-terms", { method: "POST" }),
-
-  // Towns
-  listTowns: (q?: string) => {
-    const qs = q ? `?q=${encodeURIComponent(q)}` : "";
-    return json<{ towns: Town[] }>(`/api/towns${qs}`).then((d) => d.towns);
-  },
-
-  getTown: (slug: string) =>
-    json<{ town: Town }>(`/api/towns/${encodeURIComponent(slug)}`).then(
-      (d) => d.town
+    handleResponse<{ ok: boolean; screen_name: string }>(
+      client.api.profile["screen-name"].$post({
+        json: { screen_name },
+      })
     ),
 
-  // Doodies
+  acceptTerms: () =>
+    handleResponse<{ ok: boolean }>(client.api.profile["accept-terms"].$post()),
+
+  // ---- Towns -------------------------------------------------------
+
+  listTowns: (q?: string) =>
+    handleResponse<{ towns: Town[] }>(
+      client.api.towns.$get({
+        query: q ? { q } : {},
+      })
+    ).then((d) => d.towns),
+
+  getTown: (slug: string) =>
+    handleResponse<{ town: Town }>(
+      client.api.towns[":slug"].$get({
+        param: { slug },
+      })
+    ).then((d) => d.town),
+
+  // ---- Doodies & Map -----------------------------------------------
+
   listDoodies: (
     townSlug: string,
     opts: { sort?: "recent" | "top"; type?: string; page?: number; page_size?: number } = {}
   ) => {
-    const params = new URLSearchParams();
-    if (opts.sort) params.set("sort", opts.sort);
-    if (opts.type) params.set("type", opts.type);
-    if (opts.page) params.set("page", String(opts.page));
-    if (opts.page_size) params.set("page_size", String(opts.page_size));
-    const qs = params.toString() ? `?${params.toString()}` : "";
-    return json<DoodieListResponse>(
-      `/api/towns/${encodeURIComponent(townSlug)}/doodies${qs}`
+    const query: Record<string, string> = {};
+    if (opts.sort) query.sort = opts.sort;
+    if (opts.type) query.type = opts.type;
+    if (opts.page) query.page = String(opts.page);
+    if (opts.page_size) query.page_size = String(opts.page_size);
+
+    return handleResponse<DoodieListResponse>(
+      client.api.towns[":townSlug"].doodies.$get({
+        param: { townSlug },
+        query,
+      })
     );
   },
 
   getDashboardMap: (townSlug: string) =>
-    json<{ pins: MapPin[] }>(
-      `/api/towns/${encodeURIComponent(townSlug)}/dashboard/map`
+    handleResponse<{ pins: MapPin[] }>(
+      client.api.towns[":townSlug"].dashboard.map.$get({
+        param: { townSlug },
+      })
     ).then((d) => d.pins),
 };

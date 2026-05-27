@@ -37,13 +37,14 @@ app.get("/api/health", (c) => {
   return c.json({ status: "ok" });
 });
 
-app.route("/api/profile", profile);
-app.route("/api/towns", towns);
-app.route("/api/towns/:townSlug/doodies", doodies);
-app.route("/api/towns/:townSlug/doodies/:doodieSlug/comments", doodieComments);
-app.route("/api/towns/:townSlug/dashboard", dashboard);
-app.route("/api/comments", comments);
-app.route("/api/admin", admin);
+const routes = app
+  .route("/api/profile", profile)
+  .route("/api/towns", towns)
+  .route("/api/towns/:townSlug/doodies", doodies)
+  .route("/api/towns/:townSlug/doodies/:doodieSlug/comments", doodieComments)
+  .route("/api/towns/:townSlug/dashboard", dashboard)
+  .route("/api/comments", comments)
+  .route("/api/admin", admin);
 
 app.all("/api/auth/*", async (c) => {
   const auth = createAuth(c.env.DB, c.env);
@@ -90,3 +91,4 @@ app.notFound((c) => {
 });
 
 export default app;
+export type AppType = typeof routes;

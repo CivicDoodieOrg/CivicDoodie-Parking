@@ -4,14 +4,17 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
+    "skipLibCheck": true,
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "noEmit": true,
     "paths": {
-      "$lib/*": ["./src/lib/*"]
+      "$lib/*": ["./src/lib/*"],
+      "node:sqlite": ["./src/lib/empty.d.ts"],
+      "node:async_hooks": ["./src/lib/empty.d.ts"]
     },
     "types": ["svelte"]
   },
   "include": ["src/**/*", "src/**/*.svelte"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "../src", "../../node_modules"]
 }

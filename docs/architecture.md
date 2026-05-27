@@ -138,7 +138,7 @@ flowchart LR
 
 ## 7. What to know before your first PR
 
-1. **OpenAPI is the source of truth.** New route → add its declaration in `src/openapi-routes.ts` and its Zod schema in `src/schemas.ts`. The Scalar UI updates automatically.
+1. **OpenAPI is the source of truth.** New route → add its declaration in `src/openapi-routes.ts` and its Zod schema in `src/schemas.ts`. The Scalar UI updates automatically. See [docs/openapi.md](openapi.md) for details on the structure and generation commands.
 2. **Always go through middleware.** `requireAuth` for any user action; `requireAdmin` (which returns **404**, not 403) for moderation so admin endpoints don't leak.
 3. **`"user"` is a SQL reserved word** — quote it in D1 queries.
 4. **Local D1 is a real SQLite file** in `.wrangler/state/v3/d1/`. Reset with `rm -rf .wrangler/state && npm run migrate:local`.

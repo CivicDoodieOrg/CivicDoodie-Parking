@@ -8,6 +8,7 @@ Companion to [README.md](README.md) (product spec) and [docs/implementation-plan
 git clone https://github.com/CivicDoodieOrg/CivicDoodie-Parking
 cd CivicDoodie-Parking
 npm install
+npm install --prefix web            # install frontend dependencies
 cp .dev.vars.example .dev.vars      # edit if you want real OAuth locally
 npm run migrate:local
 npm run dev          # terminal 1 — Worker backend on :8787
