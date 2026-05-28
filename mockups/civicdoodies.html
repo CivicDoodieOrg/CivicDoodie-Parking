@@ -11,6 +11,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.min.css" rel="stylesheet" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
   :root {
     --ink:#1a1714; --ink-soft:#5a544c; --ink-faint:#918a7f;
@@ -511,6 +513,19 @@
 </div>
 
 <script>
+/* ---------- API ---------- */
+var API_BASE = 'http://localhost:8787';
+
+// Central fetch wrapper — prepends API_BASE, sends credentials (session
+// cookie), and rejects on non-2xx with the server's error message.
+function apiFetch(path, opts) {
+  return fetch(API_BASE + path, Object.assign({ credentials: 'include' }, opts || {}))
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'HTTP ' + r.status); });
+      return r.json();
+    });
+}
+
 /* ---------- fake data ---------- */
 var CITIES = [
   { name:'New York, NY', city:'New York', state:'New York', country:'United States', lat:40.7411, lng:-73.9897 },
@@ -535,19 +550,18 @@ var ZONES=[], zid=0;
 // Status taxonomy for the auditor view. Each zone has a current status,
 // a human-readable label, and a colored badge tone.
 var STATUSES = [
-  { id:'reported',       label:'Reported',         tone:'orange' },
-  { id:'investigating',  label:'Investigating',    tone:'amber'  },
-  { id:'resolved',       label:'Resolved',         tone:'green'  },
-  { id:'cant_reproduce', label:'Cannot reproduce', tone:'gray'   }
+  { id:'unresolved',           label:'Unresolved',           tone:'orange' },
+  { id:'investigating',        label:'Investigating',         tone:'amber'  },
+  { id:'resolved_unconfirmed', label:'Resolved (Unconfirmed)', tone:'green'  }
 ];
 function statusById(id){ return STATUSES.find(function(s){ return s.id===id; }) || STATUSES[0]; }
 // Skewed distribution so the table looks like a real backlog: many open,
-// fewer resolved, occasional cannot-reproduce.
+// fewer resolved, occasional unconfirmed.
 var SEED_STATUS_POOL = [
-  'reported','reported','reported','reported','reported',
+  'unresolved','unresolved','unresolved','unresolved','unresolved',
   'investigating','investigating','investigating',
-  'resolved','resolved',
-  'cant_reproduce'
+  'resolved_unconfirmed','resolved_unconfirmed',
+  'unresolved'
 ];
 
 CITIES.forEach(function(c){
@@ -565,7 +579,7 @@ CITIES.forEach(function(c){
       signZone:p.sign, appZone:p.app, reportCount:rc,
       firstReportedAt:firstTs, lastReportedAt:lastTs, reporters:reps,
       status: statusId,
-      statusUpdatedAt: statusId==='reported' ? null : Date.now()-ib(0,30)*86400000,
+      statusUpdatedAt: statusId==='unresolved' ? null : Date.now()-ib(0,30)*86400000,
       auditNote: ''
     });
   }
@@ -586,11 +600,19 @@ function go(name){
 
 /* ---------- landing stats ---------- */
 function renderStats(){
-  var reports=ZONES.reduce(function(s,z){ return s+z.reportCount; },0);
-  document.getElementById('landing-stats').innerHTML =
-    statCard(ZONES.length,'zones flagged') +
-    statCard(CITIES.length,'cities') +
-    statCard(reports,'reports filed');
+  apiFetch('/api/stats')
+    .then(function(data) {
+      document.getElementById('landing-stats').innerHTML =
+        statCard(data.zones_count,   'zones flagged') +
+        statCard(data.towns_count,   'cities') +
+        statCard(data.reports_total, 'reports filed');
+    })
+    .catch(function() {
+      document.getElementById('landing-stats').innerHTML =
+        statCard('—','zones flagged') +
+        statCard('—','cities') +
+        statCard('—','reports filed');
+    });
 }
 function statCard(n,l){ return '<div class="stat"><span class="stat-num">'+n+'</span><span class="stat-label">'+l+'</span></div>'; }
 
@@ -605,6 +627,10 @@ function startCheck(){
   step=1;
   state={ photo:false, sign:'', app:'', loc:null, manualLoc:false, name:'',
           priorReports:0, resultCount:0, resultSlug:'' };
+  // Pre-fetch live pins so nearbyDoodie() works in renderVerdict without delay.
+  if(LIVE_ZONES.length===0){
+    apiFetch('/api/map').then(function(d){ LIVE_ZONES=d.pins||[]; }).catch(function(){});
+  }
   document.getElementById('photo-input').value='';
   document.getElementById('photo-preview').style.display='none';
   document.getElementById('ocr-status').style.display='none';
@@ -666,43 +692,121 @@ function onPhoto(e){
   var url=URL.createObjectURL(f);
   document.getElementById('photo-thumb').src=url;
   document.getElementById('photo-preview').style.display='block';
+  document.getElementById('loc-block').style.display='block';
   var ocr=document.getElementById('ocr-status');
   ocr.style.display='flex';
-  setTimeout(function(){
+
+  // EXIF and OCR run in parallel; each updates state independently.
+  resolveExifLocation(f);
+
+  preprocessForOcr(f).then(function(blob){
+    return Tesseract.recognize(blob,'eng',{
+      tessedit_pageseg_mode:'11',  // sparse text — best for mixed sign layouts
+      tessedit_char_whitelist:'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_ '
+    });
+  }).then(function(result){
+    console.log('[OCR raw]', result.data.text);
+    var zone=extractZoneCode(result.data.text);
+    if(zone) document.getElementById('sign-zone').value=zone;
     ocr.style.display='none';
-    // OCR (stubbed): pre-fill the sign zone for step 2.
-    document.getElementById('sign-zone').value=String(10000+Math.floor(Math.random()*89999));
-    // EXIF (stubbed): resolve the location and show the breakdown.
-    resolveExifLocation(f);
-    document.getElementById('loc-block').style.display='block';
     renderCheck();
-  },1100);
+  }).catch(function(){
+    ocr.style.display='none';
+    renderCheck();
+  });
+
   renderCheck();
 }
 
-// Stubbed EXIF + reverse-geocode. ~60% "find" a GPS-tagged location; the rest
-// fall through to manual entry. A real build reads GPS from the file and
-// reverse-geocodes the coordinates into country/state/city/address.
-function resolveExifLocation(file){
-  var found = Math.random() < 0.6;
-  if(found){
-    var c=pick(CITIES);
-    state.loc={
-      lat:c.lat+(rnd()-0.5)*0.04, lng:c.lng+(rnd()-0.5)*0.04,
-      country:c.country, state:c.state, city:c.city,
-      address:pick(STREETS)+', '+c.city, cityKey:c.name, fromExif:true
+// Render the image to a canvas, convert to grayscale, boost contrast,
+// then export as a PNG blob for Tesseract. High-contrast greyscale
+// dramatically improves accuracy on meter/sign photos.
+function preprocessForOcr(file){
+  return new Promise(function(resolve, reject){
+    var img=new Image();
+    var objUrl=URL.createObjectURL(file);
+    img.onload=function(){
+      var MAX=1600;
+      var scale=Math.min(1, MAX/Math.max(img.naturalWidth,img.naturalHeight));
+      var w=Math.round(img.naturalWidth*scale);
+      var h=Math.round(img.naturalHeight*scale);
+      var canvas=document.createElement('canvas');
+      canvas.width=w; canvas.height=h;
+      var ctx=canvas.getContext('2d');
+      ctx.drawImage(img,0,0,w,h);
+      var id=ctx.getImageData(0,0,w,h);
+      var d=id.data;
+      for(var i=0;i<d.length;i+=4){
+        // Greyscale (luminance)
+        var lum=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+        // Boost contrast: push towards black or white
+        lum=lum<128 ? Math.max(0,lum-40) : Math.min(255,lum+40);
+        d[i]=d[i+1]=d[i+2]=lum;
+      }
+      ctx.putImageData(id,0,0);
+      URL.revokeObjectURL(objUrl);
+      canvas.toBlob(function(blob){ resolve(blob); },'image/png');
     };
-    state.manualLoc=false;
-    showExifLocation();
-  } else {
-    state.loc=null;
-    state.manualLoc=true;
-    document.getElementById('exif-loc').style.display='none';
-    var man=document.getElementById('loc-manual');
-    man.style.display='block';
-    document.getElementById('loc-manual-hint').textContent=
-      "Your photo didn't include location data. Add it manually:";
-  }
+    img.onerror=function(){ URL.revokeObjectURL(objUrl); reject(new Error('img load')); };
+    img.src=objUrl;
+  });
+}
+
+// Pull a parking zone code out of raw Tesseract text.
+// Tries labeled patterns first ("Zone M-12"), then letter+digit codes, then
+// long numeric codes. Returns empty string if nothing plausible is found.
+function extractZoneCode(text){
+  if(!text) return '';
+  var m=text.match(/\b(?:zone|area|block|meter)\s*:?\s*([A-Z0-9][A-Z0-9\-]{0,7})/i);
+  if(m) return m[1].toUpperCase();
+  m=text.match(/\b([A-Z]{1,3}[-_]?\d{1,5})\b/i);
+  if(m) return m[1].toUpperCase();
+  m=text.match(/\b(\d{4,6})\b/);
+  if(m) return m[1];
+  return '';
+}
+
+function resolveExifLocation(file){
+  exifr.gps(file).then(function(pos){
+    console.log('[EXIF gps]', pos);
+    if(pos && pos.latitude!=null){
+      reverseGeocode(pos.latitude,pos.longitude).then(function(place){
+        state.loc={
+          lat:pos.latitude, lng:pos.longitude,
+          country:place.country, state:place.state, city:place.city,
+          address:place.address, cityKey:place.city||'Unknown', fromExif:true
+        };
+        state.manualLoc=false;
+        showExifLocation();
+        renderCheck();
+      }).catch(function(){
+        // Reverse-geocode failed but we have coords — show them raw.
+        state.loc={
+          lat:pos.latitude, lng:pos.longitude,
+          country:'', state:'', city:'',
+          address:pos.latitude.toFixed(5)+', '+pos.longitude.toFixed(5),
+          cityKey:'', fromExif:true
+        };
+        state.manualLoc=false;
+        showExifLocation();
+        renderCheck();
+      });
+    } else {
+      noExifLocation();
+    }
+  }).catch(function(){
+    noExifLocation();
+  });
+}
+
+function noExifLocation(){
+  state.loc=null;
+  state.manualLoc=true;
+  document.getElementById('exif-loc').style.display='none';
+  document.getElementById('loc-manual').style.display='block';
+  document.getElementById('loc-manual-hint').textContent=
+    "Your photo didn't include location data. Add it manually:";
+  renderCheck();
 }
 
 function showExifLocation(){
@@ -840,11 +944,12 @@ function renderVerdict(){
   if(mismatch){
     title.className='verdict-title bad'; title.textContent='Mismatch detected.';
     body.textContent='The sign and the app disagree. This is exactly the problem worth reporting.';
-    var m=ZONES.find(function(z){ return z.signZone===state.sign && z.appZone===state.app; });
-    var prior=m?m.reportCount:0;
-    if(prior>0){
+    var loc=state.loc;
+    var nearby = loc && loc.lat!=null ? nearbyDoodie(loc.lat, loc.lng) : null;
+    if(nearby){
+      var prior = nearby.report_count || 1;
       con.textContent = '\u2691 '+prior+' other '+(prior===1?'person has':'people have')+
-        ' reported this same zone \u2014 last reported '+relativeDate(m.lastReportedAt)+'.';
+        ' reported a mismatch near here \u2014 your report will be added to theirs.';
     } else {
       con.textContent = 'You\u2019d be the first to report this zone \u2014 first reported today, by you.';
     }
@@ -859,36 +964,60 @@ function submitReport(){
   state.sign=document.getElementById('sign-zone').value.trim();
   state.app=document.getElementById('app-zone').value.trim();
   var loc=state.loc || {};
-  var existing = ZONES.find(function(z){ return z.signZone===state.sign && z.appZone===state.app; });
-  var count, slug;
-  if(existing){
-    existing.reportCount++; count=existing.reportCount; slug=existing.slug;
-    existing.lastReportedAt=Date.now();
-    existing.reporters.unshift({ name:state.name, at:Date.now() });
-  } else {
-    var id='z'+(++zid);
-    var cityName = loc.cityKey || (loc.city ? loc.city : 'Unknown');
-    var lat = loc.lat!=null ? loc.lat : CITIES[0].lat;
-    var lng = loc.lng!=null ? loc.lng : CITIES[0].lng;
-    var addr = (loc.address && loc.address.length) ? loc.address : 'Reported location';
-    var nz={ id:id, slug:id, city:cityName,
-      address: addr + (loc.city ? ', '+loc.city : ''),
-      lat:lat, lng:lng, signZone:state.sign, appZone:state.app, reportCount:1,
-      firstReportedAt:Date.now(), lastReportedAt:Date.now(),
-      reporters:[{ name:state.name, at:Date.now() }],
-      status:'reported', statusUpdatedAt:null, auditNote:'' };
-    ZONES.push(nz); count=1; slug=id;
+  var lat=loc.lat, lng=loc.lng;
+
+  var nextBtn=document.getElementById('nav-next');
+  if(nextBtn) nextBtn.disabled=true;
+
+  function onSuccess(slug, count){
+    state.resultCount=count; state.resultSlug=slug;
+    document.getElementById('done-count').textContent=
+      'This zone has now been reported '+count+' time'+(count===1?'':'s')+'.';
+    document.getElementById('done-saved').textContent=
+      'Saved as '+shortId(slug)+' · just now';
+    step=3; renderCheck();
   }
-  state.resultCount=count; state.resultSlug=slug;
-  document.getElementById('done-count').textContent=
-    'This zone has now been reported '+count+' time'+(count===1?'':'s')+'.';
-  // Visible proof that the date was actually saved — try reporting the same
-  // sign zone + app zone again and the verdict will read this date back.
-  var savedZone=ZONES.find(function(z){ return z.slug===slug; });
-  var saved=savedZone ? new Date(savedZone.lastReportedAt).toLocaleString() : '';
-  document.getElementById('done-saved').textContent=
-    'Saved as '+shortId(slug)+' \u00b7 last reported '+saved;
-  step=3; renderCheck();
+
+  function onError(err){
+    if(nextBtn) nextBtn.disabled=false;
+    var msg=err && err.message ? err.message : String(err);
+    if(msg.indexOf('401')>=0 || msg.toLowerCase().indexOf('unauthorized')>=0){
+      alert('You need to be signed in to submit a report. Use the profile icon to connect your Google or Facebook account.');
+    } else {
+      alert('Could not submit: '+msg);
+    }
+  }
+
+  // Re-report if there is already a doodie within ~55 m of the reported location.
+  var nearby = lat!=null && lng!=null ? nearbyDoodie(lat,lng) : null;
+
+  if(nearby){
+    apiFetch('/api/towns/'+nearby.town_slug+'/doodies/'+nearby.slug+'/re-report',{ method:'POST' })
+      .then(function(data){
+        onSuccess(nearby.slug, data.report_count || (nearby.report_count+1));
+      })
+      .catch(onError);
+    return;
+  }
+
+  // No nearby doodie -- file a new one.
+  var townPromise = lat!=null && lng!=null
+    ? nearestTownSlug(lat,lng)
+    : Promise.resolve(null);
+
+  townPromise.then(function(townSlug){
+    if(!townSlug) throw new Error('No town found near your location — make sure location is set.');
+    var form=new FormData();
+    form.append('type','meter');
+    form.append('description','Sign shows zone '+state.sign+' but app shows '+state.app);
+    if(lat!=null){ form.append('lat',String(lat)); form.append('lng',String(lng)); }
+    form.append('disability_related','0');
+    var fileInput=document.getElementById('photo-input');
+    if(fileInput.files && fileInput.files[0]) form.append('images',fileInput.files[0]);
+    return apiFetch('/api/towns/'+townSlug+'/doodies',{ method:'POST', body:form });
+  }).then(function(data){
+    onSuccess(data.slug, 1);
+  }).catch(onError);
 }
 
 function nearestCityObj(lat,lng){
@@ -898,6 +1027,28 @@ function nearestCityObj(lat,lng){
     if(d<bestD){ bestD=d; best=c; }
   });
   return best;
+}
+
+// Returns the doodie in LIVE_ZONES nearest to lat/lng if within ~55m, else null.
+function nearbyDoodie(lat,lng){
+  var threshold=0.0005;
+  return LIVE_ZONES.find(function(z){
+    return z.lat!=null && z.lng!=null &&
+      Math.abs(z.lat-lat)<threshold && Math.abs(z.lng-lng)<threshold;
+  }) || null;
+}
+
+// Finds the nearest town slug from the Worker's /api/towns list.
+function nearestTownSlug(lat,lng){
+  return apiFetch('/api/towns').then(function(data){
+    var towns=data.towns||[];
+    var best=towns[0], bestD=Infinity;
+    towns.forEach(function(t){
+      var d=(t.lat-lat)*(t.lat-lat)+(t.lng-lng)*(t.lng-lng);
+      if(d<bestD){ bestD=d; best=t; }
+    });
+    return best ? best.slug : null;
+  });
 }
 
 /* ---------- map ---------- */
@@ -914,49 +1065,53 @@ function clusterIcon(cluster){
 }
 
 function renderMap(){
-  // All reported zones are always plotted now — search moves the view,
-  // it does not filter the data.
-  var zones = ZONES;
-  var reports=zones.reduce(function(s,z){ return s+z.reportCount; },0);
-  document.getElementById('zone-tally').textContent=zones.length+' zones \u00b7 '+reports+' reports';
+  apiFetch('/api/map')
+    .then(function(data) {
+      var pins = data.pins;
+      LIVE_ZONES = pins; // keep in sync for verdict + audit
+      var total = pins.reduce(function(s,p){ return s + (p.report_count||0); }, 0);
+      document.getElementById('zone-tally').textContent =
+        pins.length + ' zones · ' + total + ' reports';
 
-  if(!mapObj){
-    mapObj=L.map('map').setView([40.73,-73.99], 11);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{ maxZoom:19, attribution:'\u00a9 OpenStreetMap' }).addTo(mapObj);
-  }
+      if(!mapObj){
+        mapObj=L.map('map').setView([40.73,-73.99], 11);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{ maxZoom:19, attribution:'© OpenStreetMap' }).addTo(mapObj);
+      }
 
-  // Rebuild the cluster group. The plugin merges nearby pins as you zoom out
-  // and splits them apart as you zoom in; disableClusteringAtZoom keeps
-  // individual pins visible once you're zoomed in close.
-  if(clusterGroup){ mapObj.removeLayer(clusterGroup); }
-  clusterGroup = L.markerClusterGroup({
-    iconCreateFunction: clusterIcon,
-    showCoverageOnHover: false,
-    maxClusterRadius: 70,
-    disableClusteringAtZoom: 15
-  });
+      if(clusterGroup){ mapObj.removeLayer(clusterGroup); }
+      clusterGroup = L.markerClusterGroup({
+        iconCreateFunction: clusterIcon,
+        showCoverageOnHover: false,
+        maxClusterRadius: 70,
+        disableClusteringAtZoom: 15
+      });
 
-  zones.forEach(function(z){
-    var size = z.reportCount>=10?34:z.reportCount>=4?28:22;
-    var icon=L.divIcon({
-      className:'',
-      html:'<div class="cd-pin" style="width:'+size+'px;height:'+size+'px;">'+(z.reportCount>1?z.reportCount:'')+'</div>',
-      iconSize:[size,size], iconAnchor:[size/2,size/2]
+      pins.forEach(function(p){
+        var rc = p.report_count || 1;
+        var size = rc>=10?34:rc>=4?28:22;
+        var icon=L.divIcon({
+          className:'',
+          html:'<div class="cd-pin" style="width:'+size+'px;height:'+size+'px;">'+(rc>1?rc:'')+'</div>',
+          iconSize:[size,size], iconAnchor:[size/2,size/2]
+        });
+        var m=L.marker([p.lat, p.lng],{ icon:icon });
+        m.reportCount = rc;
+        m.on('click', function(){ openZone(p.slug, p.town_slug); });
+        clusterGroup.addLayer(m);
+      });
+
+      mapObj.addLayer(clusterGroup);
+      setTimeout(function(){ mapObj.invalidateSize(); }, 60);
+
+      if(!locatedOnce){
+        locatedOnce=true;
+        locateUser();
+      }
+    })
+    .catch(function(){
+      document.getElementById('zone-tally').textContent =
+        'Map unavailable — is the Worker running?';
     });
-    var m=L.marker([z.lat,z.lng],{ icon:icon });
-    m.reportCount = z.reportCount;       // carried so clusters can sum it
-    m.on('click', function(){ openZone(z.slug); });
-    clusterGroup.addLayer(m);
-  });
-
-  mapObj.addLayer(clusterGroup);
-  setTimeout(function(){ mapObj.invalidateSize(); }, 60);
-
-  // On first open, try to centre on the user's location.
-  if(!locatedOnce){
-    locatedOnce=true;
-    locateUser();
-  }
 }
 
 // Ask the browser for the user's location; on success drop a "you are here"
@@ -1013,16 +1168,17 @@ function doSearch(){
 
 /* ---------- audit (table for moderators / external auditors) ---------- */
 var auditEditingId = null;
+var auditEditingTownSlug = null;
 var auditStatusSelectFilled = false;
+var LIVE_ZONES = []; // populated by renderAuditTable from /api/map
 
-function shortId(id){
-  // turn 'z42' into 'CD-0042' for the table
-  var n = parseInt(id.replace(/^z/, ''), 10) || 0;
-  return 'CD-' + String(n).padStart(4,'0');
+function shortId(slug){
+  // Show the first segment of the real slug in uppercase, e.g. "swift-maple" \u2192 "SWIFT-MAPLE"
+  return slug ? slug.toUpperCase() : '\u2014';
 }
-function fmtShortDate(ts){
-  if(!ts) return '\u2014';
-  return new Date(ts).toLocaleDateString(undefined,{ year:'numeric', month:'short', day:'numeric' });
+function fmtShortDate(s){
+  if(!s) return '\u2014';
+  return new Date(s).toLocaleDateString(undefined,{ year:'numeric', month:'short', day:'numeric' });
 }
 
 // "3 days ago" / "today" / "2 months ago" — friendlier than a raw date when
@@ -1054,73 +1210,71 @@ function fillStatusOptions(){
 
 function renderAuditTable(){
   fillStatusOptions();
-
-  // status counts for the stats strip (always shows totals across ALL zones,
-  // regardless of the table filter — that's the headline accountability data)
-  var counts={}; STATUSES.forEach(function(s){ counts[s.id]=0; });
-  ZONES.forEach(function(z){ counts[z.status] = (counts[z.status]||0) + 1; });
-  var statsHtml = STATUSES.map(function(s){
-    return '<div class="as-card">'+
-      '<div class="as-num">'+counts[s.id]+'</div>'+
-      '<div class="as-lbl"><span class="status-badge '+s.tone+'" style="font-size:10px; padding:1px 7px;">'+s.label+'</span></div>'+
-    '</div>';
-  }).join('');
-  document.getElementById('audit-stats').innerHTML = statsHtml;
-
-  // table rows (filtered by status + search query)
-  var q = document.getElementById('audit-q').value.trim().toLowerCase();
-  var statusFilter = document.getElementById('audit-status').value;
-  // sort by oldest first-reported date -> most-ignored at the top
-  var rows = ZONES.slice().sort(function(a,b){ return a.firstReportedAt - b.firstReportedAt; });
-  if(statusFilter !== '__all__'){
-    rows = rows.filter(function(z){ return z.status === statusFilter; });
-  }
-  if(q){
-    rows = rows.filter(function(z){
-      return shortId(z.id).toLowerCase().indexOf(q)>=0
-          || z.signZone.indexOf(q)>=0
-          || z.appZone.indexOf(q)>=0
-          || z.address.toLowerCase().indexOf(q)>=0;
-    });
-  }
-  document.getElementById('audit-tally').textContent = rows.length+' of '+ZONES.length+' zones';
-
   var tbody = document.getElementById('audit-rows');
-  if(rows.length === 0){
-    tbody.innerHTML='<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--ink-faint);">No zones match.</td></tr>';
-    return;
-  }
-  tbody.innerHTML = rows.map(function(z){
-    var s = statusById(z.status);
-    return '<tr onclick="openAuditEditor(\''+z.id+'\')">'+
-      '<td class="id-cell">'+shortId(z.id)+'</td>'+
-      '<td class="zone-cell">'+z.signZone+' \u2260 '+z.appZone+'</td>'+
-      '<td>'+z.city+'</td>'+
-      '<td class="num">'+z.reportCount+'</td>'+
-      '<td><span class="status-badge '+s.tone+'">'+s.label+'</span></td>'+
-      '<td>'+fmtShortDate(z.firstReportedAt)+'</td>'+
-      '<td>'+fmtShortDate(z.lastReportedAt)+'</td>'+
-      '<td class="actions-cell">Edit \u2192</td>'+
-    '</tr>';
-  }).join('');
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;"><div class="spinner" style="margin:0 auto;"></div></td></tr>';
+
+  apiFetch('/api/map').then(function(data) {
+    LIVE_ZONES = data.pins;
+
+    var counts={}; STATUSES.forEach(function(s){ counts[s.id]=0; });
+    LIVE_ZONES.forEach(function(z){ counts[z.fix_state] = (counts[z.fix_state]||0) + 1; });
+    var statsHtml = STATUSES.map(function(s){
+      return '<div class="as-card">'+
+        '<div class="as-num">'+(counts[s.id]||0)+'</div>'+
+        '<div class="as-lbl"><span class="status-badge '+s.tone+'\" style="font-size:10px; padding:1px 7px;">'+s.label+'</span></div>'+
+      '</div>';
+    }).join('');
+    document.getElementById('audit-stats').innerHTML = statsHtml;
+
+    var q = document.getElementById('audit-q').value.trim().toLowerCase();
+    var statusFilter = document.getElementById('audit-status').value;
+    var rows = LIVE_ZONES.slice().sort(function(a,b){ return (a.report_count||0) - (b.report_count||0); });
+    if(statusFilter !== '__all__'){
+      rows = rows.filter(function(z){ return z.fix_state === statusFilter; });
+    }
+    if(q){
+      rows = rows.filter(function(z){
+        return z.slug.toLowerCase().indexOf(q)>=0
+            || z.town_slug.toLowerCase().indexOf(q)>=0
+            || z.type.toLowerCase().indexOf(q)>=0;
+      });
+    }
+    document.getElementById('audit-tally').textContent = rows.length+' of '+LIVE_ZONES.length+' zones';
+
+    if(rows.length === 0){
+      tbody.innerHTML='<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--ink-faint);">No zones match.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(function(z){
+      var s = statusById(z.fix_state);
+      return '<tr onclick="openAuditEditor(\''+z.slug+'\',\''+z.town_slug+'\')">' +
+        '<td class="id-cell" style="font-size:12px;">'+z.slug+'</td>'+
+        '<td class="zone-cell">'+z.type+'</td>'+
+        '<td>'+z.town_slug+'</td>'+
+        '<td class="num">'+z.report_count+'</td>'+
+        '<td><span class="status-badge '+s.tone+'">'+s.label+'</span></td>'+
+        '<td>—</td>'+
+        '<td>—</td>'+
+        '<td class="actions-cell">Edit →</td>'+
+      '</tr>';
+    }).join('');
+  }).catch(function(){
+    tbody.innerHTML='<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--ink-faint);">Could not load — is the Worker running?</td></tr>';
+  });
 }
 
-function openAuditEditor(zoneId){
-  var z = ZONES.find(function(x){ return x.id===zoneId; });
+function openAuditEditor(slug, townSlug){
+  var z = LIVE_ZONES.find(function(x){ return x.slug===slug; });
   if(!z) return;
-  auditEditingId = zoneId;
-  document.getElementById('ae-id').textContent = shortId(z.id);
-  document.getElementById('ae-sign').textContent = z.signZone;
-  document.getElementById('ae-app').textContent = z.appZone;
-  document.getElementById('ae-count').textContent = z.reportCount;
-  document.getElementById('ae-addr').textContent = z.address +
-    ' \u00b7 ' + z.reporters.length + ' reporter'+(z.reporters.length===1?'':'s') +
-    ' \u00b7 first reported '+fmtShortDate(z.firstReportedAt) +
-    ' \u00b7 last reported '+fmtShortDate(z.lastReportedAt);
-  document.getElementById('ae-status').value = z.status;
-  document.getElementById('ae-note').value = z.auditNote || '';
-
-  // hide the table, show the editor (normal-flow swap, no overlay positioning)
+  auditEditingId = slug;
+  auditEditingTownSlug = townSlug;
+  document.getElementById('ae-id').textContent = slug;
+  document.getElementById('ae-sign').textContent = z.type;
+  document.getElementById('ae-app').textContent = z.town_slug;
+  document.getElementById('ae-count').textContent = z.report_count;
+  document.getElementById('ae-addr').textContent = townSlug + ' · ' + z.report_count + ' report'+(z.report_count===1?'':'s');
+  document.getElementById('ae-status').value = z.fix_state || 'unresolved';
+  document.getElementById('ae-note').value = '';
   document.getElementById('screen-audit').classList.remove('active');
   document.getElementById('audit-editor-overlay').style.display = 'block';
   window.scrollTo(0,0);
@@ -1128,6 +1282,7 @@ function openAuditEditor(zoneId){
 
 function closeAuditEditor(){
   auditEditingId = null;
+  auditEditingTownSlug = null;
   document.getElementById('audit-editor-overlay').style.display = 'none';
   document.getElementById('screen-audit').classList.add('active');
   renderAuditTable();
@@ -1135,48 +1290,53 @@ function closeAuditEditor(){
 }
 
 function saveAuditEditor(){
-  if(!auditEditingId) { closeAuditEditor(); return; }
-  var z = ZONES.find(function(x){ return x.id===auditEditingId; });
-  if(z){
-    var newStatus = document.getElementById('ae-status').value;
-    var newNote = document.getElementById('ae-note').value.trim();
-    var changed = z.status !== newStatus || z.auditNote !== newNote;
-    z.status = newStatus;
-    z.auditNote = newNote;
-    if(changed) z.statusUpdatedAt = Date.now();
-  }
-  closeAuditEditor();
+  if(!auditEditingId || !auditEditingTownSlug) { closeAuditEditor(); return; }
+  var newFixState = document.getElementById('ae-status').value;
+  var saveBtn = document.querySelector('#audit-editor-overlay .btn-primary');
+  if(saveBtn) saveBtn.disabled = true;
+  apiFetch('/api/towns/' + auditEditingTownSlug + '/doodies/' + auditEditingId, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fix_state: newFixState })
+  })
+  .then(function(){ closeAuditEditor(); })
+  .catch(function(err){
+    alert('Save failed: ' + err.message + ' (admin session required)');
+    if(saveBtn) saveBtn.disabled = false;
+  });
 }
 
 
 /* ---------- zone detail ---------- */
-function openZone(slug){
-  var z=ZONES.find(function(x){ return x.slug===slug; });
-  if(!z){ go('map'); return; }
-  function fd(ts){ return new Date(ts).toLocaleDateString(undefined,{ year:'numeric', month:'short', day:'numeric' }); }
-  var hist = z.reporters.map(function(r){
-    return '<li class="history-row"><span style="font-weight:500;">'+(r.name||'Anonymous')+'</span><span class="faint">'+fd(r.at)+'</span></li>';
-  }).join('');
-  if(z.reportCount>z.reporters.length){
-    hist += '<li class="history-row faint" style="justify-content:center;">+ '+(z.reportCount-z.reporters.length)+' more reports</li>';
-  }
-  document.getElementById('zone-detail-body').innerHTML =
-    '<button class="back-link" onclick="go(\'map\')">&larr; Mismatch map</button>'+
-    '<div class="card">'+
-      '<span class="mismatch-tag">⚑ Mismatch detected</span>'+
-      '<div class="zone-zones">'+
-        '<div class="zz"><span class="zz-label">Sign zone</span><span class="zz-num">'+z.signZone+'</span></div>'+
-        '<span class="zz-op">≠</span>'+
-        '<div class="zz"><span class="zz-label">App zone</span><span class="zz-num">'+z.appZone+'</span></div>'+
-      '</div>'+
-      '<div class="zone-facts"><span class="faint">📍 '+z.address+'</span>'+
-      '<span class="faint">🗓 Last reported '+fd(z.lastReportedAt)+'</span></div>'+
-      '<div class="count-banner"><span class="count-num">'+z.reportCount+'</span><span class="muted">reports</span></div>'+
-    '</div>'+
-    '<div class="history"><h2>Report history</h2><ul class="history-list">'+hist+'</ul></div>'+
-    '<div class="zone-cta"><p class="muted">Seeing this same mismatch? Add your report to the count.</p>'+
-    '<button class="btn btn-primary" onclick="startCheck()">Report or check a zone</button></div>';
+// townSlug is passed from the map pin click; needed to build the API URL.
+function openZone(slug, townSlug){
   go('zone');
+  var body = document.getElementById('zone-detail-body');
+  body.innerHTML = '<div class="spinner"></div>';
+
+  apiFetch('/api/towns/' + townSlug + '/doodies/' + slug)
+    .then(function(data) {
+      var d = data.doodie;
+      function fd(s){ return new Date(s).toLocaleDateString(undefined,{ year:'numeric', month:'short', day:'numeric' }); }
+      body.innerHTML =
+        '<button class="back-link" onclick="go(\'map\')">&larr; Mismatch map</button>'+
+        '<div class="card">'+
+          '<div class="zone-facts">'+
+            '<span class="faint">📍 '+(d.town ? d.town.name : townSlug)+'</span>'+
+            '<span class="faint">🗓 Last reported '+fd(d.last_reported_at)+'</span>'+
+            '<span class="faint">Type: '+d.type+'</span>'+
+          '</div>'+
+          '<p style="margin:12px 0;">'+d.description+'</p>'+
+          '<div class="count-banner"><span class="count-num">'+d.report_count+'</span><span class="muted">reports</span></div>'+
+        '</div>'+
+        '<div class="zone-cta">'+
+          '<p class="muted">Encountered this same issue? Add your report.</p>'+
+          '<button class="btn btn-primary" onclick="startCheck()">Report or check a zone</button>'+
+        '</div>';
+    })
+    .catch(function(err) {
+      body.innerHTML = '<p class="muted" style="padding:2rem;">Could not load details: '+err.message+'</p>';
+    });
 }
 
 renderStats();

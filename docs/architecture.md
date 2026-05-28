@@ -36,13 +36,17 @@ flowchart TB
 ```mermaid
 erDiagram
     USER ||--o{ DOODIE : reports
+    USER ||--o{ DOODIE_RE_REPORT : "re-reports"
     USER ||--o{ COMMENT : writes
-    USER ||--o{ AUDIT_LOG : "acts in"
+    USER ||--o{ DOODIE_AUDIT : "acts in"
     TOWN ||--o{ DOODIE : scopes
     DOODIE ||--o{ DOODIE_IMAGE : has
-    DOODIE ||--o{ VOTE : "up/down tallied separately"
+    DOODIE ||--o{ DOODIE_VOTE : "up/down tallied separately"
+    DOODIE ||--o{ DOODIE_RE_REPORT : "confirmed by"
     DOODIE ||--o{ COMMENT : has
-    COMMENT ||--o{ COMMENT_VOTE : tallies
+    DOODIE ||--o{ DOODIE_AUDIT : "audited by"
+    COMMENT ||--o{ DOODIE_COMMENT_VOTE : tallies
+    DOODIE ||--o{ REPORT : "flagged by"
     COMMENT ||--o{ REPORT : "flagged by"
 
     USER {
@@ -50,7 +54,7 @@ erDiagram
         string screen_name "public, unique nocase"
         string display_name "private, from OAuth"
         int    brownie_points "karma"
-        string status "active | banned"
+        string status "active | restricted | suspended | banned"
         string country "required"
         string city "optional"
         datetime terms_accepted_at
@@ -58,31 +62,62 @@ erDiagram
     TOWN {
         string slug PK "e.g. boston-ma"
         string name
-        string state
+        string state_or_region
         string country
+        real   lat
+        real   lng
     }
     DOODIE {
         string id PK
-        string slug
-        string town_slug FK
+        string slug "unique per town"
+        string town_id FK
         string type "meter | garage | enforcement"
         string description
-        bool   approved
         bool   disability_related
+        real   lat
+        real   lng
+        int    upvotes_count "denormalised"
+        int    downvotes_count "denormalised"
+        int    comments_count "denormalised"
+        int    report_count "times re-reported; starts at 1"
+        datetime last_reported_at "updated on each re-report"
+        string fix_state "unresolved | investigating | resolved_unconfirmed"
+        string moderation_status "pending | approved | flagged | removed"
         string reporter_id FK
+    }
+    DOODIE_RE_REPORT {
+        string doodie_id FK
+        string user_id FK
+        string ip_address "PII — never returned in API"
+        datetime created_at
     }
     COMMENT {
         string id PK
         string doodie_id FK
         string user_id FK
         string body
-        string ip_address "for accountability"
+        string ip_address "PII — never returned in API"
+        int    upvotes_count "denormalised"
+        int    downvotes_count "denormalised"
+        bool   censored
+    }
+    DOODIE_AUDIT {
+        string id PK
+        string doodie_id FK
+        string actor_id FK "nullable — preserved on user delete"
+        string action "created | edited | moderated | re-reported | ..."
+        string details "JSON diff"
+        datetime created_at
     }
 ```
 
-Migrations live in `migrations/` and apply in numeric order — `0001_init` → `0004_screen_name_nocase`.
+Migrations live in `migrations/` and apply in numeric order — `0001_init` → `0005_doodie_fix_tracking`.
 
-## 4. Request lifecycle — "user files a Doodie with a photo"
+## 4. Request lifecycles
+
+The same pattern drives every endpoint: rate-limit → `requireAuth` → validate → query → optional R2 → JSON. Two flows are worth calling out explicitly.
+
+### Filing a new Doodie
 
 ```mermaid
 sequenceDiagram
@@ -98,14 +133,36 @@ sequenceDiagram
     W->>MW: rate-limit (sliding window)
     MW->>MW: requireAuth — session lookup + ban check
     MW->>H: handler
-    H->>H: Zod-validate form against schema
-    H->>DB: insert doodie (Kysely)
-    H->>S: stream each image, store R2 keys
-    H->>DB: append audit_log entry
-    H-->>B: 201 + Doodie JSON (slug, image URLs)
+    H->>H: validate type, description, coords, images
+    H->>H: profileGate — screen_name + country + ToS required
+    H->>S: stream each image → R2 (upload before DB write)
+    H->>DB: batch — INSERT doodie + doodie_image rows + audit row
+    H-->>B: 201 + {slug, url, image_count}
 ```
 
-The **same pattern** repeats for every endpoint: middleware → Zod schema → Kysely query → optional R2 → JSON. Get one route, you get all of them.
+### Re-reporting an existing Doodie ("I saw this too")
+
+When a second user encounters the same issue they `POST /:slug/re-report` rather than filing a duplicate. This increments `report_count`, stamps `last_reported_at`, and writes an audit entry — all in one D1 batch. A unique constraint on `doodie_re_report(doodie_id, user_id)` prevents the same person from inflating the count.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Browser (SPA)
+    participant W as Worker entry
+    participant MW as Middleware
+    participant H as routes/doodies.ts
+    participant DB as D1
+
+    B->>W: POST /api/towns/boston-ma/doodies/abc123/re-report<br/>Authorization: Bearer <session>
+    W->>MW: rate-limit (sliding window)
+    MW->>MW: requireAuth — session lookup + ban check
+    MW->>H: handler
+    H->>H: profileGate — screen_name + country + ToS required
+    H->>DB: SELECT 1 FROM doodie_re_report — duplicate guard
+    DB-->>H: no existing row
+    H->>DB: batch — INSERT doodie_re_report<br/>+ UPDATE doodie SET report_count+1, last_reported_at<br/>+ INSERT audit row
+    H-->>B: 200 + {report_count, already: false}
+```
 
 ## 5. Tech stack & why
 
@@ -143,6 +200,10 @@ flowchart LR
 3. **`"user"` is a SQL reserved word** — quote it in D1 queries.
 4. **Local D1 is a real SQLite file** in `.wrangler/state/v3/d1/`. Reset with `rm -rf .wrangler/state && npm run migrate:local`.
 5. **Run `npm run preflight` before pushing.** Same checks as CI. Green here = green there.
+6. **Doodies have two independent status fields** — don't conflate them:
+   - `moderation_status` (`pending | approved | flagged | removed`) — content moderation. Is this report appropriate? Set by admins.
+   - `fix_state` (`unresolved | investigating | resolved_unconfirmed`) — real-world resolution. Is the underlying parking issue fixed? Also set by admins, surfaced in the auditor view.
+7. **`report_count` ≠ `upvotes_count`.** `report_count` tracks how many distinct users have filed or re-reported this same issue (via `doodie_re_report`). `upvotes_count` is community agreement. Both matter but mean different things on the map and in the auditor table.
 
 ## Appendix — Mermaid quick reference
 

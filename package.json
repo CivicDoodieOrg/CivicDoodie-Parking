@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "mkdir -p public && wrangler dev",
+    "dev:mockup": "npx serve -p 3001 mockups",
     "preflight": "npm run build:web && npm run typecheck",
     "deploy:prod": "npm run preflight && npm run build:wrangler-deploy && wrangler deploy --config wrangler.deploy.json --env prod",
     "deploy:staging": "npm run preflight && npm run build:wrangler-deploy && wrangler deploy --config wrangler.deploy.json --env staging",

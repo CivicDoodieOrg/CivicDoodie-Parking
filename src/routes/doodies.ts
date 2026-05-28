@@ -84,6 +84,8 @@ async function loadTown(db: D1Database, slug: string) {
     }>();
 }
 
+type FixState = "unresolved" | "investigating" | "resolved_unconfirmed";
+
 interface DoodieRow {
   id: string;
   slug: string;
@@ -97,6 +99,9 @@ interface DoodieRow {
   upvotes_count: number;
   downvotes_count: number;
   comments_count: number;
+  report_count: number;
+  last_reported_at: string;
+  fix_state: FixState;
   moderation_status: "pending" | "approved" | "flagged" | "removed";
   created_at: string;
   updated_at: string;
@@ -111,6 +116,7 @@ async function loadDoodie(
     .prepare(
       `SELECT id, slug, town_id, reporter_id, type, description, disability_related,
               lat, lng, upvotes_count, downvotes_count, comments_count,
+              report_count, last_reported_at, fix_state,
               moderation_status, created_at, updated_at
        FROM doodie
        WHERE town_id = ? AND slug = ?`
@@ -149,6 +155,9 @@ function publicDoodie(
     upvotes_count: d.upvotes_count,
     downvotes_count: d.downvotes_count,
     comments_count: d.comments_count,
+    report_count: d.report_count,
+    last_reported_at: d.last_reported_at,
+    fix_state: d.fix_state,
     moderation_status: d.moderation_status,
     created_at: d.created_at,
     updated_at: d.updated_at,
@@ -321,6 +330,7 @@ doodies.get("/", async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT d.id, d.slug, d.type, d.description, d.disability_related,
             d.lat, d.lng, d.upvotes_count, d.downvotes_count, d.comments_count,
+            d.report_count, d.last_reported_at, d.fix_state,
             d.created_at, u.screen_name as reporter_screen_name,
             (SELECT COUNT(*) FROM doodie_image WHERE doodie_id = d.id) as image_count,
             (SELECT position FROM doodie_image WHERE doodie_id = d.id ORDER BY position LIMIT 1) as first_image_pos
@@ -342,6 +352,9 @@ doodies.get("/", async (c) => {
       upvotes_count: number;
       downvotes_count: number;
       comments_count: number;
+      report_count: number;
+      last_reported_at: string;
+      fix_state: FixState;
       created_at: string;
       reporter_screen_name: string | null;
       image_count: number;
@@ -359,6 +372,9 @@ doodies.get("/", async (c) => {
     upvotes_count: r.upvotes_count,
     downvotes_count: r.downvotes_count,
     comments_count: r.comments_count,
+    report_count: r.report_count,
+    last_reported_at: r.last_reported_at,
+    fix_state: r.fix_state,
     created_at: r.created_at,
     reporter: { screen_name: r.reporter_screen_name },
     image_count: r.image_count,
@@ -507,6 +523,7 @@ doodies.patch("/:doodieSlug", requireAuth, async (c) => {
       description?: unknown;
       disability_related?: unknown;
       moderation_status?: unknown;
+      fix_state?: unknown;
     }>()
     .catch(() => ({}) as Record<string, unknown>);
 
@@ -545,6 +562,16 @@ doodies.patch("/:doodieSlug", requireAuth, async (c) => {
     if (ms !== doodie.moderation_status) {
       updates.push({ col: "moderation_status", val: ms });
       auditDetails.moderation_status = { from: doodie.moderation_status, to: ms };
+    }
+  }
+  if (admin && typeof body.fix_state === "string") {
+    const fs = body.fix_state;
+    if (!["unresolved", "investigating", "resolved_unconfirmed"].includes(fs)) {
+      return c.json({ error: "invalid fix_state" }, 400);
+    }
+    if (fs !== doodie.fix_state) {
+      updates.push({ col: "fix_state", val: fs });
+      auditDetails.fix_state = { from: doodie.fix_state, to: fs };
     }
   }
 
@@ -606,6 +633,69 @@ doodies.delete("/:doodieSlug", requireAuth, async (c) => {
   await deleteImages(c.env.IMAGES, r2Keys);
 
   return c.json({ ok: true });
+});
+
+// POST /:doodieSlug/re-report — "I saw this same problem too" -----------
+// Increments report_count and updates last_reported_at. Requires a
+// complete profile (same gate as filing). One re-report per user per
+// doodie is enforced via the existing doodie_vote table's PK analogue —
+// we reuse doodie_vote with a dedicated 're-report' marker to avoid a new
+// table; see INSERT OR IGNORE below.
+
+doodies.post("/:doodieSlug/re-report", requireAuth, async (c) => {
+  const user = c.get("user");
+  const townSlug = c.req.param("townSlug")!;
+  const doodieSlug = c.req.param("doodieSlug")!;
+  const town = await loadTown(c.env.DB, townSlug);
+  if (!town) return c.json({ error: "Not found" }, 404);
+  const doodie = await loadDoodie(c.env.DB, town.id, doodieSlug);
+  if (!doodie) return c.json({ error: "Not found" }, 404);
+
+  const admin = isAdmin(user, c.env.ADMIN_USER_IDS);
+  if (!canSeeDoodie(user.id, doodie, admin)) {
+    return c.json({ error: "Not found" }, 404);
+  }
+  if (doodie.reporter_id === user.id) {
+    return c.json({ error: "You filed this Doodie — it already counts as your report." }, 400);
+  }
+  if (doodie.moderation_status !== "approved") {
+    return c.json({ error: "Can only re-report approved Doodies." }, 400);
+  }
+
+  const gateError = await profileGate(c.env.DB, user.id);
+  if (gateError) return c.json({ error: gateError }, 412);
+
+  const ip = ipOf(c);
+
+  // Guard against double-counting: if this user already re-reported, no-op.
+  const already = await c.env.DB.prepare(
+    `SELECT 1 FROM doodie_re_report WHERE doodie_id = ? AND user_id = ?`
+  )
+    .bind(doodie.id, user.id)
+    .first();
+  if (already) {
+    return c.json({ ok: true, report_count: doodie.report_count, already: true });
+  }
+
+  const now = new Date().toISOString().replace("T", " ").slice(0, 19);
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO doodie_re_report (doodie_id, user_id, ip_address) VALUES (?, ?, ?)`
+    ).bind(doodie.id, user.id, ip),
+    c.env.DB.prepare(
+      `UPDATE doodie
+       SET report_count = report_count + 1,
+           last_reported_at = ?,
+           updated_at = ?
+       WHERE id = ?`
+    ).bind(now, now, doodie.id),
+    c.env.DB.prepare(
+      `INSERT INTO doodie_audit (id, doodie_id, actor_id, action, ip_address)
+       VALUES (?, ?, ?, 're-reported', ?)`
+    ).bind(crypto.randomUUID(), doodie.id, user.id, ip),
+  ]);
+
+  return c.json({ ok: true, report_count: doodie.report_count + 1, already: false });
 });
 
 // POST /:doodieSlug/vote — up / down / null (toggle off) ----------------

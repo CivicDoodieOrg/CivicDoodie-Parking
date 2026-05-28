@@ -51,6 +51,9 @@ export const DoodieType = z.enum(["enforcement", "meter", "garage"]).openapi("Do
 export const ModerationStatus = z
   .enum(["pending", "approved", "flagged", "removed"])
   .openapi("ModerationStatus");
+export const FixState = z
+  .enum(["unresolved", "investigating", "resolved_unconfirmed"])
+  .openapi("FixState");
 export const UserStatus = z
   .enum(["active", "restricted", "suspended", "banned"])
   .openapi("UserStatus");
@@ -96,6 +99,9 @@ export const DoodieListItem = z
     upvotes_count: z.number().int(),
     downvotes_count: z.number().int(),
     comments_count: z.number().int(),
+    report_count: z.number().int(),
+    last_reported_at: z.string(),
+    fix_state: FixState,
     created_at: z.string(),
     reporter: z.object({ screen_name: z.string().nullable() }),
     image_count: z.number().int(),
@@ -129,6 +135,9 @@ export const DoodieDetail = z
     upvotes_count: z.number().int(),
     downvotes_count: z.number().int(),
     comments_count: z.number().int(),
+    report_count: z.number().int(),
+    last_reported_at: z.string(),
+    fix_state: FixState,
     moderation_status: ModerationStatus,
     created_at: z.string(),
     updated_at: z.string(),
@@ -174,6 +183,9 @@ export const DoodieUpdateRequest = z
     moderation_status: ModerationStatus.optional().openapi({
       description: "Admin-only field. Non-admins providing this are silently ignored.",
     }),
+    fix_state: FixState.optional().openapi({
+      description: "Admin-only field. Tracks real-world resolution status of the underlying issue.",
+    }),
   })
   .openapi("DoodieUpdateRequest");
 
@@ -188,6 +200,8 @@ export const MapPin = z
     lng: z.number(),
     upvotes_count: z.number().int(),
     downvotes_count: z.number().int(),
+    report_count: z.number().int(),
+    fix_state: FixState,
   })
   .openapi("MapPin");
 

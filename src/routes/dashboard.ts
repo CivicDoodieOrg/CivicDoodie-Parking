@@ -25,7 +25,8 @@ dashboard.get("/map", async (c) => {
   if (!town) return c.json({ error: "Not found" }, 404);
 
   const rows = await c.env.DB.prepare(
-    `SELECT id, slug, type, lat, lng, upvotes_count, downvotes_count
+    `SELECT id, slug, type, lat, lng, upvotes_count, downvotes_count,
+            report_count, fix_state
      FROM doodie
      WHERE town_id = ?
        AND moderation_status = 'approved'
@@ -40,6 +41,8 @@ dashboard.get("/map", async (c) => {
       lng: number;
       upvotes_count: number;
       downvotes_count: number;
+      report_count: number;
+      fix_state: "unresolved" | "investigating" | "resolved_unconfirmed";
     }>();
 
   return c.json({ pins: rows.results ?? [] });
