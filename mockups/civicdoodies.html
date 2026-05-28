@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CivicDoodies</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Spline+Sans:wght@400;500;600&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.min.css" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
+<style>
+  :root {
+    --ink:#1a1714; --ink-soft:#5a544c; --ink-faint:#918a7f;
+    --paper:#f4f0e8; --paper-card:#fbf9f4; --line:#ddd6c8; --line-strong:#c9c0ac;
+    --signal:#d8442b; --signal-dark:#a8331f; --signal-wash:#f7e4df;
+    --ok:#1f7a52; --ok-wash:#e0efe7;
+    --radius:10px; --radius-lg:14px;
+    --font-display:'Fraunces',Georgia,serif;
+    --font-body:'Spline Sans',system-ui,sans-serif;
+    --font-mono:'Spline Sans Mono',monospace;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font-body); background:var(--paper); color:var(--ink); line-height:1.6; -webkit-font-smoothing:antialiased; }
+  h1,h2,h3 { font-family:var(--font-display); font-weight:500; line-height:1.15; letter-spacing:-0.01em; }
+  button { font-family:inherit; cursor:pointer; }
+  input,select { font-family:inherit; font-size:15px; }
+  ::selection { background:var(--signal); color:#fff; }
+
+  /* topbar */
+  .topbar { position:sticky; top:0; z-index:40; height:60px; background:rgba(244,240,232,0.94); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); }
+  .topbar-in { max-width:920px; margin:0 auto; height:100%; padding:0 22px; display:flex; align-items:center; justify-content:space-between; }
+  .brand { display:flex; align-items:center; gap:9px; cursor:pointer; }
+  .brand .mark { width:30px; height:30px; border-radius:7px; background:var(--signal); color:#fff; display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:600; font-size:13px; transform:rotate(-5deg); }
+  .brand .name { font-family:var(--font-display); font-weight:600; font-size:19px; }
+  .topbar nav { display:flex; gap:6px; }
+  .nav-link { background:none; border:none; color:var(--ink-soft); font-size:14px; font-weight:500; padding:8px 12px; border-radius:7px; }
+  .nav-link:hover { background:var(--line); color:var(--ink); }
+  .nav-link.cta { background:var(--signal); color:#fff; }
+  .nav-link.cta:hover { background:var(--signal-dark); }
+
+  .page { max-width:920px; margin:0 auto; padding:28px 22px 90px; }
+  .screen { display:none; }
+  .screen.active { display:block; }
+
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; border:1px solid var(--line-strong); background:var(--paper-card); color:var(--ink); border-radius:9px; padding:11px 18px; font-size:14px; font-weight:500; transition:transform .1s,background .15s; }
+  .btn:hover { background:var(--line); }
+  .btn:active { transform:scale(.98); }
+  .btn:disabled { opacity:.45; cursor:not-allowed; }
+  .btn-primary { background:var(--signal); border-color:var(--signal); color:#fff; }
+  .btn-primary:hover { background:var(--signal-dark); }
+  .btn-block { width:100%; }
+  .muted { color:var(--ink-soft); }
+  .faint { color:var(--ink-faint); font-size:13px; }
+  .card { background:var(--paper-card); border:1px solid var(--line); border-radius:var(--radius-lg); padding:18px 20px; }
+
+  .field-label { display:block; font-size:13px; font-weight:500; color:var(--ink-soft); margin-bottom:5px; }
+  .field-input,.field-select { width:100%; padding:11px 13px; border:1px solid var(--line-strong); border-radius:8px; background:var(--paper-card); color:var(--ink); margin-bottom:16px; }
+  .field-input:focus,.field-select:focus { outline:none; border-color:var(--signal); box-shadow:0 0 0 3px var(--signal-wash); }
+  .zone-field { text-align:center; font-family:var(--font-mono); font-size:1.8rem; font-weight:500; letter-spacing:.08em; }
+
+  /* landing */
+  .landing { max-width:640px; margin:0 auto; padding:44px 22px 96px; }
+  .hero { text-align:center; margin-bottom:36px; }
+  .eyebrow { display:inline-block; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--signal-dark); background:var(--signal-wash); padding:5px 12px; border-radius:100px; margin-bottom:18px; }
+  .hero h1 { font-size:clamp(2rem,5.5vw,3rem); margin-bottom:14px; }
+  .lead { color:var(--ink-soft); font-size:1.05rem; margin-bottom:28px; }
+  .cta-btn { display:flex; align-items:center; gap:14px; width:100%; background:var(--signal); color:#fff; border:none; padding:18px 22px; border-radius:14px; text-align:left; transition:transform .12s,background .15s; }
+  .cta-btn:hover { background:var(--signal-dark); transform:translateY(-2px); }
+  .cta-icon { font-size:28px; }
+  .cta-main { font-family:var(--font-display); font-size:1.2rem; font-weight:600; display:block; }
+  .cta-hint { font-size:.85rem; opacity:.9; }
+  .map-link { background:none; border:none; margin-top:14px; font-size:14px; font-weight:500; color:var(--signal-dark); text-decoration:underline; }
+  .stats { display:flex; gap:12px; margin-bottom:40px; }
+  .stat { flex:1; background:var(--paper-card); border:1px solid var(--line); border-radius:12px; padding:16px 10px; text-align:center; }
+  .stat-num { display:block; font-family:var(--font-display); font-size:1.9rem; font-weight:600; color:var(--signal-dark); }
+  .stat-label { font-size:12px; color:var(--ink-faint); }
+  .how h2 { font-size:1.4rem; margin-bottom:16px; }
+  .steps { list-style:none; display:flex; flex-direction:column; gap:14px; }
+  .steps li { display:flex; gap:14px; align-items:flex-start; }
+  .step-n { flex-shrink:0; width:30px; height:30px; border-radius:50%; background:var(--signal-wash); color:var(--signal-dark); font-weight:600; font-size:14px; display:flex; align-items:center; justify-content:center; }
+  .steps li div { font-size:.95rem; color:var(--ink-soft); }
+  .steps li strong { color:var(--ink); font-weight:500; }
+
+  /* check flow */
+  .check-page { max-width:540px; }
+  .back-link { background:none; border:none; font-size:14px; color:var(--ink-soft); margin-bottom:16px; padding:0; }
+  .back-link:hover { color:var(--ink); }
+  .progress { display:flex; gap:6px; margin-bottom:6px; }
+  .pbar { height:5px; flex:1; border-radius:3px; background:var(--line); transition:background .25s; }
+  .pbar.on { background:var(--signal); }
+  .step-count { font-size:12px; color:var(--ink-faint); margin-bottom:20px; }
+  .check-page h1 { font-size:clamp(1.5rem,4vw,2rem); margin-bottom:6px; }
+  .check-step { display:none; }
+  .check-step.active { display:block; }
+  .check-step .muted { margin-bottom:18px; }
+
+  .dropzone { width:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:32px 16px; border:2px dashed var(--line-strong); border-radius:10px; background:var(--paper-card); color:var(--ink-soft); }
+  .dropzone:hover { border-color:var(--signal); background:var(--signal-wash); }
+  .dz-icon { font-size:26px; }
+  .photo-preview { display:none; margin-top:12px; }
+  .photo-preview img { width:100%; max-height:230px; object-fit:cover; border-radius:10px; border:1px solid var(--line); }
+  .photo-preview .pp-actions { display:flex; gap:8px; margin-top:8px; }
+  .ocr-status { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--ink-soft); margin-top:10px; }
+  .dot-spin { width:14px; height:14px; border:2px solid var(--line-strong); border-top-color:var(--signal); border-radius:50%; animation:spin .7s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .ocr-tag { font-size:13px; font-weight:500; margin-bottom:12px; }
+  .ocr-tag.found { color:var(--ok); }
+
+  .verdict-card { border-radius:var(--radius-lg); padding:24px; border:1px solid var(--line); text-align:center; }
+  .verdict-card.bad { background:var(--signal-wash); border-color:var(--signal); }
+  .verdict-card.good { background:var(--ok-wash); border-color:var(--ok); }
+  .verdict-zones { display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:16px; }
+  .vz { display:flex; flex-direction:column; gap:4px; }
+  .vz-label { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); }
+  .vz-num { font-family:var(--font-mono); font-size:1.8rem; font-weight:600; }
+  .vz-op { font-size:1.6rem; font-weight:600; color:var(--ink-soft); }
+  .verdict-title { font-size:1.3rem; margin-bottom:6px; }
+  .verdict-title.bad { color:var(--signal-dark); }
+  .verdict-title.good { color:var(--ok); }
+  .verdict-body { font-size:.95rem; color:var(--ink-soft); margin-bottom:12px; }
+  .consensus { font-size:.9rem; font-weight:500; color:var(--signal-dark); }
+
+  .geo-btn { margin-bottom:10px; }
+  .loc-card { background:var(--ok-wash); border:1px solid var(--ok); border-radius:10px; padding:14px; margin-bottom:16px; }
+  .loc-card-head { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  .loc-icon { font-size:18px; color:var(--ok); }
+  .loc-src { font-size:13px; font-weight:500; color:var(--ok); }
+  .exif-check { margin-left:auto; color:var(--ok); font-size:16px; }
+  .loc-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 16px; margin-bottom:12px; }
+  .loc-grid dt { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-faint); }
+  .loc-grid dd { font-size:14px; font-weight:500; color:var(--ink); }
+  .loc-wrong-btn { background:none; border:none; color:var(--signal-dark); font-size:13px; font-weight:500; text-decoration:underline; padding:0; }
+  .loc-wrong-btn:hover { color:var(--signal); }
+  .privacy-note { margin-top:-6px; }
+  .nav-row { display:flex; gap:10px; margin-top:24px; }
+  .nav-next { flex:1; }
+
+  .done { text-align:center; padding:24px 0; }
+  .done-check { width:56px; height:56px; border-radius:50%; background:var(--ok-wash); color:var(--ok); font-size:28px; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; }
+  .done h1 { font-size:1.6rem; margin-bottom:8px; }
+  .done-count { font-weight:500; color:var(--signal-dark); margin:12px 0 20px; }
+  .done-actions { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+
+  /* map */
+  .map-head { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:18px; }
+  .map-head h1 { font-size:clamp(1.7rem,4vw,2.3rem); }
+  .controls { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+  .controls .field-select { width:auto; margin-bottom:0; min-width:180px; }
+  .zone-tally { font-size:13px; color:var(--ink-faint); margin-left:auto; }
+  #map { width:100%; height:520px; border:1px solid var(--line); border-radius:var(--radius-lg); }
+  .leaflet-container { font-family:var(--font-body); background:var(--paper-card); }
+  .cd-pin { background:var(--signal); color:#fff; border:2.5px solid #fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:12px; box-shadow:0 1px 5px rgba(0,0,0,.45); }
+  .cd-cluster { background:var(--signal-dark); color:#fff; border:3px solid #fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:14px; box-shadow:0 2px 7px rgba(0,0,0,.5); }
+  .cd-userpin { width:20px; height:20px; border-radius:50%; background:#1d6fe0; border:3px solid #fff; box-shadow:0 0 0 4px rgba(29,111,224,.25),0 1px 5px rgba(0,0,0,.4); }
+  .search-wrap { display:flex; align-items:center; gap:0; flex:1; min-width:240px; border:1px solid var(--line-strong); border-radius:9px; background:var(--paper-card); overflow:hidden; }
+  .search-wrap:focus-within { border-color:var(--signal); box-shadow:0 0 0 3px var(--signal-wash); }
+  .search-icon { padding:0 10px 0 12px; color:var(--ink-faint); font-size:16px; }
+  .search-input { flex:1; border:none; background:transparent; padding:10px 4px; font-size:15px; outline:none; }
+  .search-btn { border:none; background:var(--signal); color:#fff; font-size:14px; font-weight:500; padding:10px 16px; cursor:pointer; }
+  .search-btn:hover { background:var(--signal-dark); }
+  .search-msg { font-size:13px; color:var(--ink-soft); margin:8px 0 0; min-height:18px; }
+
+  /* zone detail */
+  .zone-page { max-width:560px; }
+  .mismatch-tag { display:inline-block; font-size:12px; font-weight:500; color:var(--signal-dark); background:var(--signal-wash); padding:4px 10px; border-radius:100px; margin-bottom:14px; }
+  .zone-zones { display:flex; align-items:center; justify-content:center; gap:18px; margin-bottom:16px; }
+  .zz { display:flex; flex-direction:column; gap:4px; text-align:center; }
+  .zz-label { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); }
+  .zz-num { font-family:var(--font-mono); font-size:2rem; font-weight:600; }
+  .zz-op { font-size:1.7rem; font-weight:600; color:var(--signal); }
+  .zone-facts { display:flex; flex-direction:column; gap:4px; padding:14px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); margin-bottom:16px; }
+  .count-banner { display:flex; align-items:baseline; justify-content:center; gap:8px; }
+  .count-num { font-family:var(--font-display); font-size:2.4rem; font-weight:600; color:var(--signal-dark); }
+  .history { margin-top:26px; }
+  .history h2 { font-size:1.2rem; margin-bottom:12px; }
+  .history-list { list-style:none; display:flex; flex-direction:column; gap:6px; }
+  .history-row { display:flex; justify-content:space-between; background:var(--paper-card); border:1px solid var(--line); border-radius:8px; padding:10px 14px; font-size:14px; }
+  .zone-cta { margin-top:26px; text-align:center; padding:20px; background:var(--paper-card); border:1px solid var(--line); border-radius:var(--radius-lg); }
+
+  /* audit page */
+  .audit-page { max-width:1080px; }
+  .audit-head { margin-bottom:18px; }
+  .audit-head h1 { font-size:clamp(1.7rem,4vw,2.3rem); }
+  .audit-stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:8px; margin-bottom:16px; }
+  .as-card { background:var(--paper-card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+  .as-card .as-num { font-family:var(--font-display); font-size:1.4rem; font-weight:600; }
+  .as-card .as-lbl { font-size:11px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.04em; }
+  .audit-controls { display:flex; gap:12px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+  .audit-table-wrap { background:var(--paper-card); border:1px solid var(--line); border-radius:var(--radius-lg); overflow:hidden; overflow-x:auto; }
+  .audit-table { width:100%; border-collapse:collapse; font-size:14px; }
+  .audit-table th, .audit-table td { padding:10px 14px; text-align:left; border-bottom:1px solid var(--line); }
+  .audit-table th { font-weight:500; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-faint); background:var(--paper); position:sticky; top:0; }
+  .audit-table tbody tr { cursor:pointer; transition:background .12s; }
+  .audit-table tbody tr:hover { background:var(--paper); }
+  .audit-table td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .audit-table .id-cell { font-family:var(--font-mono); font-size:13px; color:var(--ink-soft); }
+  .audit-table .zone-cell { font-family:var(--font-mono); font-size:14px; font-weight:500; white-space:nowrap; }
+  .audit-table .actions-cell { color:var(--signal-dark); font-size:13px; text-align:right; }
+
+  .status-badge { display:inline-block; font-size:12px; font-weight:500; padding:3px 10px; border-radius:100px; white-space:nowrap; }
+  .status-badge.orange { background:#fde2c8; color:#9a4d05; }
+  .status-badge.amber  { background:#fde7a6; color:#7a5400; }
+  .status-badge.blue   { background:#d6e4f4; color:#1d3f6e; }
+  .status-badge.green  { background:#d3e9d8; color:#1f5a30; }
+  .status-badge.gray   { background:#e2dccb; color:#5a544c; }
+
+  /* audit row editor — uses normal document flow (no absolute/fixed) so the
+     iframe sizes correctly. Shown by toggling display only. */
+  #audit-editor-overlay {
+    background:var(--paper);
+    padding:40px 22px 80px;
+  }
+  .audit-editor { width:100%; max-width:520px; margin:0 auto; background:var(--paper-card); }
+  .zone-cta p { margin-bottom:12px; }
+
+  .empty-state { text-align:center; padding:48px 20px; color:var(--ink-soft); }
+  .spinner { width:22px; height:22px; border:2.5px solid var(--line-strong); border-top-color:var(--signal); border-radius:50%; animation:spin .7s linear infinite; margin:60px auto; }
+
+  /* tos */
+  .tos-banner { position:fixed; left:0; right:0; bottom:0; z-index:45; background:var(--ink); color:var(--paper); padding:12px 22px; display:flex; align-items:center; justify-content:center; gap:16px; flex-wrap:wrap; font-size:13px; }
+  .tos-banner button { background:var(--paper); color:var(--ink); border:none; border-radius:6px; padding:6px 14px; font-size:13px; font-weight:500; }
+  .tos-banner a { color:#f0b5a8; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand" onclick="go('landing')">
+      <span class="mark">CD</span><span class="name">CivicDoodies</span>
+    </div>
+    <nav>
+      <button class="nav-link" onclick="go('map')">Mismatch map</button>
+      <button class="nav-link" onclick="go('audit')">Auditor</button>
+      <button class="nav-link cta" onclick="startCheck()">Report or check a zone</button>
+    </nav>
+  </div>
+</header>
+
+<!-- ===== LANDING ===== -->
+<section id="screen-landing" class="screen active">
+  <div class="landing">
+    <div class="hero">
+      <span class="eyebrow">The sign said one zone. The app said another.</span>
+      <h1>Paid for parking and still got a ticket?</h1>
+      <p class="lead">If the ParkMobile zone on the curb sign doesn't match the zone in the app, you shouldn't be penalized. Check a zone in seconds — and put it on the map.</p>
+      <button class="cta-btn" onclick="startCheck()">
+        <span class="cta-icon">&#9655;</span>
+        <span>
+          <span class="cta-main">Report or check a zone</span>
+          <span class="cta-hint">Take a photo of the sign. We'll do the rest.</span>
+        </span>
+      </button>
+      <br />
+      <button class="map-link" onclick="go('map')">See the mismatch map &rarr;</button>
+    </div>
+    <div class="stats" id="landing-stats"></div>
+    <div class="how">
+      <h2>How it works</h2>
+      <ol class="steps">
+        <li><span class="step-n">1</span><div><strong>Photograph the sign.</strong> Snap the ParkMobile zone number printed on the curb.</div></li>
+        <li><span class="step-n">2</span><div><strong>Confirm both zones.</strong> We read the sign's number; you enter the one your app showed.</div></li>
+        <li><span class="step-n">3</span><div><strong>It goes on the map.</strong> If they mismatch, the zone is logged — and every repeat report adds to its count.</div></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- ===== CHECK FLOW ===== -->
+<section id="screen-check" class="screen">
+  <div class="page check-page">
+    <button class="back-link" onclick="go('landing')">&larr; Back</button>
+    <div class="progress" id="check-progress"></div>
+    <p class="step-count" id="check-stepcount"></p>
+
+    <!-- STEP 1: photo, location, name, both zones -->
+    <div class="check-step" data-step="1">
+      <h1>Report or check a zone</h1>
+      <p class="muted">Photograph the sign, confirm the details, and enter the zone your app showed.</p>
+
+      <button class="dropzone" id="dropzone" onclick="document.getElementById('photo-input').click()">
+        <span class="dz-icon">&#10515;</span>
+        <span style="font-size:13px;">Tap to take or upload a photo of the sign</span>
+      </button>
+      <input type="file" id="photo-input" accept="image/*" hidden onchange="onPhoto(event)" />
+      <div class="photo-preview" id="photo-preview">
+        <img id="photo-thumb" alt="Sign photo preview" />
+        <div class="pp-actions">
+          <button class="btn" onclick="document.getElementById('photo-input').click()">Retake photo</button>
+        </div>
+      </div>
+      <div class="ocr-status" id="ocr-status" style="display:none;">
+        <span class="dot-spin"></span> Reading the photo&hellip;
+      </div>
+
+      <!-- everything below unlocks once the photo is processed -->
+      <div id="loc-block" style="display:none; margin-top:20px; padding-top:20px; border-top:1px solid var(--line);">
+
+        <label class="field-label">Location of this sign</label>
+
+        <!-- happy path: location resolved from the photo's EXIF metadata -->
+        <div id="exif-loc" class="loc-card" style="display:none;">
+          <div class="loc-card-head">
+            <span class="loc-icon">&#9678;</span>
+            <span class="loc-src">Read from your photo</span>
+            <span class="exif-check">&check;</span>
+          </div>
+          <dl class="loc-grid">
+            <div><dt>Country</dt><dd id="loc-country">&mdash;</dd></div>
+            <div><dt>State</dt><dd id="loc-state">&mdash;</dd></div>
+            <div><dt>City</dt><dd id="loc-city">&mdash;</dd></div>
+            <div><dt>Address</dt><dd id="loc-address">&mdash;</dd></div>
+          </dl>
+          <button id="loc-wrong-btn" class="loc-wrong-btn" onclick="enableManualLocation()">
+            Location wrong? Use my location instead
+          </button>
+        </div>
+
+        <!-- fallback / correction: ask for the device location -->
+        <div id="loc-manual" style="display:none;">
+          <p class="faint" id="loc-manual-hint" style="margin-bottom:8px;">
+            Your photo didn&rsquo;t include location data. Add it manually:
+          </p>
+          <button class="btn btn-block geo-btn" id="geo-btn" onclick="useLocation()">&#9678; Use my current location</button>
+          <input id="addr" class="field-input" type="text" placeholder="Street address or cross streets" />
+        </div>
+
+        <!-- both zone numbers, entered here on step 1 -->
+        <div style="margin-top:8px; padding-top:18px; border-top:1px solid var(--line);">
+          <p class="ocr-tag found" id="ocr-tag">&check; Sign zone read from photo &mdash; check it is correct</p>
+          <label class="field-label" for="sign-zone">Zone number on the sign</label>
+          <input id="sign-zone" class="field-input zone-field" type="text" inputmode="numeric" placeholder="00000" oninput="syncZones()" />
+
+          <label class="field-label" for="app-zone" style="margin-top:4px;">Zone number the ParkMobile app showed you</label>
+          <input id="app-zone" class="field-input zone-field" type="text" inputmode="numeric" placeholder="00000" oninput="syncZones()" />
+          <p class="faint" style="margin-top:-8px; margin-bottom:8px;">Enter what your ParkMobile app displayed. When available, this can be verified against ParkMobile directly.</p>
+        </div>
+
+        <label class="field-label" for="rep-name" style="margin-top:8px;">Your name (optional)</label>
+        <input id="rep-name" class="field-input" type="text" placeholder="Optional &mdash; shown on the report. Skip it if you prefer." />
+        <p class="faint privacy-note">We resolve the location from your photo&rsquo;s metadata and record any name you enter. See our Privacy page.</p>
+      </div>
+    </div>
+
+    <!-- STEP 2: the verdict -->
+    <div class="check-step" data-step="2">
+      <h1>Here&rsquo;s the result</h1>
+      <p class="muted">Based on the zones you confirmed.</p>
+
+      <div class="verdict-card" id="verdict-card">
+        <div class="verdict-zones">
+          <div class="vz"><span class="vz-label">Sign zone</span><span class="vz-num" id="v-sign">&mdash;</span></div>
+          <span class="vz-op" id="v-op">&ne;</span>
+          <div class="vz"><span class="vz-label">App zone</span><span class="vz-num" id="v-app">&mdash;</span></div>
+        </div>
+        <h2 class="verdict-title" id="v-title"></h2>
+        <p class="verdict-body" id="v-body"></p>
+        <p class="consensus" id="v-consensus"></p>
+      </div>
+
+      <div class="card" id="verdict-loc" style="margin-top:16px;">
+        <p class="faint" style="margin-bottom:4px;">This report will be pinned at</p>
+        <p id="v-loc-text" style="font-size:14px; font-weight:500;">&mdash;</p>
+      </div>
+    </div>
+
+    <!-- STEP 3: done -->
+    <div class="check-step" data-step="3">
+      <div class="done">
+        <div class="done-check">&check;</div>
+        <h1>Report filed</h1>
+        <p class="muted">Thank you. This mismatch is now on the map for your city.</p>
+        <p class="done-count" id="done-count"></p>
+        <p class="faint" id="done-saved" style="margin-bottom:18px;"></p>
+        <div class="done-actions">
+          <button class="btn btn-primary" onclick="go('map')">See it on the map</button>
+          <button class="btn" onclick="startCheck()">Check another zone</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav-row" id="check-nav">
+      <button class="btn" id="nav-back" onclick="checkBack()">&larr; Back</button>
+      <button class="btn btn-primary nav-next" id="nav-next" onclick="checkNext()">Continue</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== MAP ===== -->
+<section id="screen-map" class="screen">
+  <div class="page">
+    <div class="map-head">
+      <div>
+        <h1>Mismatch map</h1>
+        <p class="muted">Every pin is a reported zone mismatch. Zoom out to see reports grouped by area.</p>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="search-wrap">
+        <span class="search-icon">&#9906;</span>
+        <input id="map-search" class="search-input" type="text"
+          placeholder="Search a city, address, or place&hellip;"
+          onkeydown="if(event.key==='Enter')doSearch()" />
+        <button class="search-btn" onclick="doSearch()">Search</button>
+      </div>
+      <span class="zone-tally" id="zone-tally"></span>
+    </div>
+    <p class="search-msg" id="search-msg"></p>
+    <div id="map"></div>
+  </div>
+</section>
+
+<!-- ===== ZONE DETAIL ===== -->
+<section id="screen-zone" class="screen">
+  <div class="page zone-page" id="zone-detail-body"></div>
+</section>
+
+<!-- ===== AUDIT ===== -->
+<section id="screen-audit" class="screen">
+  <div class="page audit-page">
+    <header class="audit-head">
+      <div>
+        <h1>Auditor view</h1>
+        <p class="muted">Every reported ParkMobile zone, with its current status. Click a row to update it.</p>
+      </div>
+    </header>
+
+    <div class="audit-stats" id="audit-stats"></div>
+
+    <div class="audit-controls">
+      <input id="audit-q" class="field-input" type="text"
+        placeholder="Search ID, zone number, or address&hellip;"
+        oninput="renderAuditTable()" style="margin-bottom:0; max-width:320px;" />
+      <select id="audit-status" class="field-select" onchange="renderAuditTable()"
+        style="margin-bottom:0; width:auto; min-width:170px;">
+        <option value="__all__">All statuses</option>
+      </select>
+      <span class="faint" id="audit-tally" style="margin-left:auto;"></span>
+    </div>
+
+    <div class="audit-table-wrap">
+      <table class="audit-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Sign \u2260 App</th>
+            <th>City</th>
+            <th class="num">Reports</th>
+            <th>Status</th>
+            <th>First reported &uarr;</th>
+            <th>Last reported</th>
+            <th class="audit-actions-col"></th>
+          </tr>
+        </thead>
+        <tbody id="audit-rows"></tbody>
+      </table>
+    </div>
+
+    <p class="faint" style="margin-top:14px;">
+      This page would be access-controlled in a real deployment &mdash; only authenticated city staff or moderators should edit status. In this mockup, changes are kept in memory only.
+    </p>
+  </div>
+</section>
+
+<!-- audit row editor (kept in normal flow so the iframe sizes correctly) -->
+<div id="audit-editor-overlay" style="display:none;">
+  <div class="audit-editor card">
+    <p class="faint" style="margin-bottom:4px;">Editing</p>
+    <h2 id="ae-id" style="font-size:1.2rem; margin-bottom:14px;">&mdash;</h2>
+
+    <div style="display:flex; gap:20px; margin-bottom:14px; flex-wrap:wrap;">
+      <div><span class="zz-label">Sign zone</span><div id="ae-sign" class="zz-num" style="font-size:1.4rem;">&mdash;</div></div>
+      <div><span class="zz-label">App zone</span><div id="ae-app" class="zz-num" style="font-size:1.4rem;">&mdash;</div></div>
+      <div><span class="zz-label">Reports</span><div id="ae-count" class="zz-num" style="font-size:1.4rem;">&mdash;</div></div>
+    </div>
+    <p class="faint" id="ae-addr" style="margin-bottom:14px;">&mdash;</p>
+
+    <label class="field-label" for="ae-status">Status</label>
+    <select id="ae-status" class="field-select"></select>
+
+    <label class="field-label" for="ae-note">Audit note (optional)</label>
+    <textarea id="ae-note" class="field-input" rows="3" style="resize:vertical;"
+      placeholder="e.g. Confirmed in field 2026-05-20; sticker replaced."></textarea>
+
+    <div style="display:flex; gap:10px; justify-content:flex-end;">
+      <button class="btn" onclick="closeAuditEditor()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveAuditEditor()">Save</button>
+    </div>
+  </div>
+</div>
+
+
+<section id="screen-privacy" class="screen">
+  <div class="page" style="max-width:640px;">
+    <button class="back-link" onclick="go('landing')">&larr; Back</button>
+    <h1 style="font-size:2rem; margin-bottom:16px;">Privacy Policy</h1>
+    <p class="faint" style="margin-bottom:12px;">Placeholder copy — replace with reviewed legal text before launch.</p>
+    <h2 style="font-size:1.15rem; margin:18px 0 6px;">What we collect</h2>
+    <p class="muted">When you report a zone, CivicDoodies records the zone numbers, an approximate location, any photo you attach, and a name only if you choose to enter one. No account is required.</p>
+    <h2 style="font-size:1.15rem; margin:18px 0 6px;">Location and name</h2>
+    <p class="muted">Location is used to place your report on the map. The name field is optional — leave it blank and the report stays anonymous.</p>
+  </div>
+</section>
+
+<div class="tos-banner" id="tos-banner">
+  <p>By using CivicDoodies you agree to our <a onclick="go('privacy')">Privacy Policy</a>.</p>
+  <button onclick="document.getElementById('tos-banner').style.display='none'">Got it</button>
+</div>
+
+<script>
+/* ---------- fake data ---------- */
+var CITIES = [
+  { name:'New York, NY', city:'New York', state:'New York', country:'United States', lat:40.7411, lng:-73.9897 },
+  { name:'Brooklyn, NY', city:'Brooklyn', state:'New York', country:'United States', lat:40.6782, lng:-73.9442 },
+  { name:'Jersey City, NJ', city:'Jersey City', state:'New Jersey', country:'United States', lat:40.7178, lng:-74.0431 },
+  { name:'Hoboken, NJ', city:'Hoboken', state:'New Jersey', country:'United States', lat:40.7440, lng:-74.0324 }
+];
+var STREETS = ['Main St','Oak Ave','3rd St','Elm St','Park Blvd','Washington Ave','Cherry Ln','Market St','River Rd','5th Ave'];
+var NAMES = ['Sam R.','Mia T.','Jordan P.','','Alex K.','','Dana W.','Chris L.',''];
+var seed = 20260527;
+function rnd(){ seed=(seed*1664525+1013904223)%4294967296; return seed/4294967296; }
+function pick(a){ return a[Math.floor(rnd()*a.length)]; }
+function ib(lo,hi){ return lo+Math.floor(rnd()*(hi-lo+1)); }
+function zonePair(){
+  var sign=String(ib(10000,99999)), d=sign.split(''), i=ib(0,3);
+  var tmp=d[i]; d[i]=d[i+1]; d[i+1]=tmp;
+  var app=d.join(''); if(app===sign) app=String(Number(sign)+1);
+  return { sign:sign, app:app };
+}
+var ZONES=[], zid=0;
+
+// Status taxonomy for the auditor view. Each zone has a current status,
+// a human-readable label, and a colored badge tone.
+var STATUSES = [
+  { id:'reported',       label:'Reported',         tone:'orange' },
+  { id:'investigating',  label:'Investigating',    tone:'amber'  },
+  { id:'resolved',       label:'Resolved',         tone:'green'  },
+  { id:'cant_reproduce', label:'Cannot reproduce', tone:'gray'   }
+];
+function statusById(id){ return STATUSES.find(function(s){ return s.id===id; }) || STATUSES[0]; }
+// Skewed distribution so the table looks like a real backlog: many open,
+// fewer resolved, occasional cannot-reproduce.
+var SEED_STATUS_POOL = [
+  'reported','reported','reported','reported','reported',
+  'investigating','investigating','investigating',
+  'resolved','resolved',
+  'cant_reproduce'
+];
+
+CITIES.forEach(function(c){
+  var n=ib(5,9);
+  for(var i=0;i<n;i++){
+    var p=zonePair(), rc=ib(1,14), id='z'+(++zid);
+    var reps=[]; for(var r=0;r<Math.min(rc,6);r++) reps.push({ name:pick(NAMES), at:Date.now()-ib(1,80)*86400000 });
+    var statusId = pick(SEED_STATUS_POOL);
+    var lastTs = Date.now()-ib(0,18)*86400000;
+    // first report is somewhere between 30 and 240 days BEFORE the most recent
+    var firstTs = lastTs - ib(30,240)*86400000;
+    ZONES.push({
+      id:id, slug:id, city:c.name, address:pick(STREETS)+', '+c.name,
+      lat:c.lat+(rnd()-0.5)*0.05, lng:c.lng+(rnd()-0.5)*0.05,
+      signZone:p.sign, appZone:p.app, reportCount:rc,
+      firstReportedAt:firstTs, lastReportedAt:lastTs, reporters:reps,
+      status: statusId,
+      statusUpdatedAt: statusId==='reported' ? null : Date.now()-ib(0,30)*86400000,
+      auditNote: ''
+    });
+  }
+});
+
+/* ---------- navigation ---------- */
+function go(name){
+  document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
+  document.getElementById('screen-'+name).classList.add('active');
+  // always dismiss the audit editor on navigation
+  var ed=document.getElementById('audit-editor-overlay');
+  if(ed) ed.style.display='none';
+  window.scrollTo(0,0);
+  if(name==='landing') renderStats();
+  if(name==='map') { renderMap(); }
+  if(name==='audit') { renderAuditTable(); }
+}
+
+/* ---------- landing stats ---------- */
+function renderStats(){
+  var reports=ZONES.reduce(function(s,z){ return s+z.reportCount; },0);
+  document.getElementById('landing-stats').innerHTML =
+    statCard(ZONES.length,'zones flagged') +
+    statCard(CITIES.length,'cities') +
+    statCard(reports,'reports filed');
+}
+function statCard(n,l){ return '<div class="stat"><span class="stat-num">'+n+'</span><span class="stat-label">'+l+'</span></div>'; }
+
+/* ---------- check flow ---------- */
+/* 3 screens: 1 = photo + location + name, 2 = the mismatch, 3 = done.
+   Mismatch is NOT shown until step 2. Submit happens at the end of step 2. */
+var TOTAL=2, step=1;
+var state={ photo:false, sign:'', app:'', loc:null, manualLoc:false, name:'',
+            priorReports:0, resultCount:0, resultSlug:'' };
+
+function startCheck(){
+  step=1;
+  state={ photo:false, sign:'', app:'', loc:null, manualLoc:false, name:'',
+          priorReports:0, resultCount:0, resultSlug:'' };
+  document.getElementById('photo-input').value='';
+  document.getElementById('photo-preview').style.display='none';
+  document.getElementById('ocr-status').style.display='none';
+  document.getElementById('loc-block').style.display='none';
+  document.getElementById('exif-loc').style.display='none';
+  document.getElementById('loc-manual').style.display='none';
+  document.getElementById('verdict-card').style.display='none';
+  document.getElementById('sign-zone').value='';
+  document.getElementById('app-zone').value='';
+  document.getElementById('rep-name').value='';
+  var addr=document.getElementById('addr'); if(addr) addr.value='';
+  document.getElementById('geo-btn').innerHTML='&#9678; Use my current location';
+  go('check'); renderCheck();
+}
+
+function renderCheck(){
+  document.querySelectorAll('.check-step').forEach(function(s){
+    s.classList.toggle('active', Number(s.dataset.step)===step);
+  });
+  var prog=''; for(var i=0;i<TOTAL;i++) prog+='<span class="pbar'+(i<step?' on':'')+'"></span>';
+  document.getElementById('check-progress').innerHTML=prog;
+  var nav=document.getElementById('check-nav');
+  if(step>TOTAL){
+    nav.style.display='none';
+    document.getElementById('check-stepcount').textContent='';
+    document.getElementById('check-progress').style.display='none';
+    return;
+  }
+  nav.style.display='flex';
+  document.getElementById('check-progress').style.display='flex';
+  document.getElementById('check-stepcount').textContent='Step '+step+' of '+TOTAL;
+  document.getElementById('nav-back').style.display = step>1 ? 'inline-flex' : 'none';
+  var next=document.getElementById('nav-next');
+  next.textContent = step===2 ? 'Submit report' : 'Continue';
+  next.disabled = !canAdvance();
+}
+
+function canAdvance(){
+  if(step===1){
+    // need a photo, a resolved location (EXIF or manual), AND both zones
+    return state.photo && !!state.loc
+      && document.getElementById('sign-zone').value.trim().length>0
+      && document.getElementById('app-zone').value.trim().length>0;
+  }
+  // step 2 only shows the verdict — always submittable
+  return true;
+}
+
+function syncZones(){
+  state.sign=document.getElementById('sign-zone').value.trim();
+  state.app=document.getElementById('app-zone').value.trim();
+  renderCheck();
+}
+
+function onPhoto(e){
+  var f=e.target.files && e.target.files[0];
+  if(!f) return;
+  state.photo=true;
+  var url=URL.createObjectURL(f);
+  document.getElementById('photo-thumb').src=url;
+  document.getElementById('photo-preview').style.display='block';
+  var ocr=document.getElementById('ocr-status');
+  ocr.style.display='flex';
+  setTimeout(function(){
+    ocr.style.display='none';
+    // OCR (stubbed): pre-fill the sign zone for step 2.
+    document.getElementById('sign-zone').value=String(10000+Math.floor(Math.random()*89999));
+    // EXIF (stubbed): resolve the location and show the breakdown.
+    resolveExifLocation(f);
+    document.getElementById('loc-block').style.display='block';
+    renderCheck();
+  },1100);
+  renderCheck();
+}
+
+// Stubbed EXIF + reverse-geocode. ~60% "find" a GPS-tagged location; the rest
+// fall through to manual entry. A real build reads GPS from the file and
+// reverse-geocodes the coordinates into country/state/city/address.
+function resolveExifLocation(file){
+  var found = Math.random() < 0.6;
+  if(found){
+    var c=pick(CITIES);
+    state.loc={
+      lat:c.lat+(rnd()-0.5)*0.04, lng:c.lng+(rnd()-0.5)*0.04,
+      country:c.country, state:c.state, city:c.city,
+      address:pick(STREETS)+', '+c.city, cityKey:c.name, fromExif:true
+    };
+    state.manualLoc=false;
+    showExifLocation();
+  } else {
+    state.loc=null;
+    state.manualLoc=true;
+    document.getElementById('exif-loc').style.display='none';
+    var man=document.getElementById('loc-manual');
+    man.style.display='block';
+    document.getElementById('loc-manual-hint').textContent=
+      "Your photo didn't include location data. Add it manually:";
+  }
+}
+
+function showExifLocation(){
+  document.getElementById('exif-loc').style.display='block';
+  document.getElementById('loc-manual').style.display='none';
+  var srcLabel=document.querySelector('#exif-loc .loc-src');
+  if(srcLabel) srcLabel.textContent='Read from your photo';
+  var wrongBtn=document.getElementById('loc-wrong-btn');
+  if(wrongBtn) wrongBtn.style.display='';
+  document.getElementById('loc-country').textContent=state.loc.country;
+  document.getElementById('loc-state').textContent=state.loc.state;
+  document.getElementById('loc-city').textContent=state.loc.city;
+  document.getElementById('loc-address').textContent=state.loc.address;
+}
+
+// "Location wrong?" — switch from the EXIF breakdown to manual entry.
+function enableManualLocation(){
+  state.manualLoc=true;
+  state.loc=null;
+  document.getElementById('exif-loc').style.display='none';
+  var man=document.getElementById('loc-manual');
+  man.style.display='block';
+  document.getElementById('loc-manual-hint').textContent=
+    'Set the correct location for this sign:';
+  renderCheck();
+}
+
+function useLocation(){
+  var btn=document.getElementById('geo-btn');
+  btn.textContent='Locating\u2026';
+  if(!navigator.geolocation){ btn.textContent='Location unavailable'; return; }
+  navigator.geolocation.getCurrentPosition(function(pos){
+    var lat=pos.coords.latitude, lng=pos.coords.longitude;
+    btn.textContent='Looking up address\u2026';
+    // Reverse-geocode the coordinates so the user sees Country/State/City/Address
+    // instead of raw numbers \u2014 same UI as the EXIF happy path.
+    reverseGeocode(lat,lng).then(function(place){
+      state.loc={
+        lat:lat, lng:lng,
+        country:place.country, state:place.state, city:place.city,
+        address:place.address, cityKey:place.city || 'Unknown', fromExif:false
+      };
+      // hide the manual-entry block, show the breakdown card instead
+      document.getElementById('loc-manual').style.display='none';
+      document.getElementById('exif-loc').style.display='block';
+      var srcLabel=document.querySelector('#exif-loc .loc-src');
+      if(srcLabel) srcLabel.textContent='From your device location';
+      var wrongBtn=document.getElementById('loc-wrong-btn');
+      if(wrongBtn) wrongBtn.style.display='none';
+      document.getElementById('loc-country').textContent=place.country || '\u2014';
+      document.getElementById('loc-state').textContent=place.state   || '\u2014';
+      document.getElementById('loc-city').textContent=place.city     || '\u2014';
+      document.getElementById('loc-address').textContent=place.address || '\u2014';
+      renderCheck();
+    }).catch(function(){
+      // Reverse-geocode failed (offline, rate-limited, etc.). Keep manual
+      // entry visible, fill the address with raw coords as a last resort,
+      // and tell the user why.
+      var c=nearestCityObj(lat,lng);
+      state.loc={
+        lat:lat, lng:lng,
+        country:c.country, state:c.state, city:c.city,
+        address:lat.toFixed(5)+', '+lng.toFixed(5), cityKey:c.name, fromExif:false
+      };
+      document.getElementById('addr').value=lat.toFixed(5)+', '+lng.toFixed(5);
+      btn.innerHTML='&check; Coordinates captured';
+      document.getElementById('loc-manual-hint').textContent=
+        "We couldn't look up the address (no connection). Add it manually if you can.";
+      renderCheck();
+    });
+  }, function(){ btn.textContent='Location not shared \u2014 type an address instead'; });
+}
+
+// Reverse-geocode lat/lng -> { country, state, city, address } via Nominatim
+// (same service used by the map search). No API key. Online-only.
+function reverseGeocode(lat,lng){
+  var url='https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lon='+lng+'&zoom=18&addressdetails=1';
+  return fetch(url, { headers:{ 'Accept':'application/json' } })
+    .then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.json(); })
+    .then(function(d){
+      var a=d.address||{};
+      var streetParts=[a.house_number, a.road].filter(Boolean);
+      return {
+        country: a.country || '',
+        state:   a.state || a.region || '',
+        city:    a.city || a.town || a.village || a.suburb || a.county || '',
+        address: streetParts.length ? streetParts.join(' ') : (d.display_name || '').split(',')[0]
+      };
+    });
+}
+
+function checkNext(){
+  if(step===1){
+    state.name=document.getElementById('rep-name').value.trim();
+    state.sign=document.getElementById('sign-zone').value.trim();
+    state.app=document.getElementById('app-zone').value.trim();
+    if(state.manualLoc && state.loc){
+      var typed=document.getElementById('addr').value.trim();
+      if(typed) state.loc.address=typed;
+    }
+    renderVerdict();
+    renderLocSummary();
+    step=2; renderCheck();
+    return;
+  }
+  if(step===2){ submitReport(); return; }
+}
+
+// Step 2 location summary line.
+function renderLocSummary(){
+  var el=document.getElementById('v-loc-text');
+  if(!el) return;
+  var loc=state.loc;
+  if(loc){
+    var parts=[loc.address, loc.city, loc.state, loc.country].filter(function(p){ return p && p.length; });
+    el.textContent = parts.join(', ');
+  } else {
+    el.textContent='Location not set';
+  }
+}
+
+function checkBack(){ if(step>1){ step--; renderCheck(); } }
+
+function renderVerdict(){
+  var card=document.getElementById('verdict-card');
+  card.style.display='block';
+  var mismatch = state.sign!==state.app;
+  card.className='verdict-card '+(mismatch?'bad':'good');
+  document.getElementById('v-sign').textContent=state.sign||'\u2014';
+  document.getElementById('v-app').textContent=state.app||'\u2014';
+  document.getElementById('v-op').textContent=mismatch?'\u2260':'=';
+  var title=document.getElementById('v-title'),
+      body=document.getElementById('v-body'),
+      con=document.getElementById('v-consensus');
+  if(mismatch){
+    title.className='verdict-title bad'; title.textContent='Mismatch detected.';
+    body.textContent='The sign and the app disagree. This is exactly the problem worth reporting.';
+    var m=ZONES.find(function(z){ return z.signZone===state.sign && z.appZone===state.app; });
+    var prior=m?m.reportCount:0;
+    if(prior>0){
+      con.textContent = '\u2691 '+prior+' other '+(prior===1?'person has':'people have')+
+        ' reported this same zone \u2014 last reported '+relativeDate(m.lastReportedAt)+'.';
+    } else {
+      con.textContent = 'You\u2019d be the first to report this zone \u2014 first reported today, by you.';
+    }
+  } else {
+    title.className='verdict-title good'; title.textContent='These zones match.';
+    body.textContent='Good news \u2014 no mismatch here. Nothing to report for this spot.';
+    con.textContent='';
+  }
+}
+
+function submitReport(){
+  state.sign=document.getElementById('sign-zone').value.trim();
+  state.app=document.getElementById('app-zone').value.trim();
+  var loc=state.loc || {};
+  var existing = ZONES.find(function(z){ return z.signZone===state.sign && z.appZone===state.app; });
+  var count, slug;
+  if(existing){
+    existing.reportCount++; count=existing.reportCount; slug=existing.slug;
+    existing.lastReportedAt=Date.now();
+    existing.reporters.unshift({ name:state.name, at:Date.now() });
+  } else {
+    var id='z'+(++zid);
+    var cityName = loc.cityKey || (loc.city ? loc.city : 'Unknown');
+    var lat = loc.lat!=null ? loc.lat : CITIES[0].lat;
+    var lng = loc.lng!=null ? loc.lng : CITIES[0].lng;
+    var addr = (loc.address && loc.address.length) ? loc.address : 'Reported location';
+    var nz={ id:id, slug:id, city:cityName,
+      address: addr + (loc.city ? ', '+loc.city : ''),
+      lat:lat, lng:lng, signZone:state.sign, appZone:state.app, reportCount:1,
+      firstReportedAt:Date.now(), lastReportedAt:Date.now(),
+      reporters:[{ name:state.name, at:Date.now() }],
+      status:'reported', statusUpdatedAt:null, auditNote:'' };
+    ZONES.push(nz); count=1; slug=id;
+  }
+  state.resultCount=count; state.resultSlug=slug;
+  document.getElementById('done-count').textContent=
+    'This zone has now been reported '+count+' time'+(count===1?'':'s')+'.';
+  // Visible proof that the date was actually saved — try reporting the same
+  // sign zone + app zone again and the verdict will read this date back.
+  var savedZone=ZONES.find(function(z){ return z.slug===slug; });
+  var saved=savedZone ? new Date(savedZone.lastReportedAt).toLocaleString() : '';
+  document.getElementById('done-saved').textContent=
+    'Saved as '+shortId(slug)+' \u00b7 last reported '+saved;
+  step=3; renderCheck();
+}
+
+function nearestCityObj(lat,lng){
+  var best=CITIES[0], bestD=Infinity;
+  CITIES.forEach(function(c){
+    var d=(c.lat-lat)*(c.lat-lat)+(c.lng-lng)*(c.lng-lng);
+    if(d<bestD){ bestD=d; best=c; }
+  });
+  return best;
+}
+
+/* ---------- map ---------- */
+var mapObj=null, clusterGroup=null, userMarker=null, locatedOnce=false;
+
+// A cluster's number is the SUM of report counts of every zone inside it —
+// "the number of reports in this area" — not just the pin count.
+function clusterIcon(cluster){
+  var total=0;
+  cluster.getAllChildMarkers().forEach(function(m){ total += (m.reportCount||0); });
+  var size = total>=50?54:total>=15?46:38;
+  var html='<div class="cd-cluster" style="width:'+size+'px;height:'+size+'px;">'+total+'</div>';
+  return L.divIcon({ html:html, className:'', iconSize:[size,size] });
+}
+
+function renderMap(){
+  // All reported zones are always plotted now — search moves the view,
+  // it does not filter the data.
+  var zones = ZONES;
+  var reports=zones.reduce(function(s,z){ return s+z.reportCount; },0);
+  document.getElementById('zone-tally').textContent=zones.length+' zones \u00b7 '+reports+' reports';
+
+  if(!mapObj){
+    mapObj=L.map('map').setView([40.73,-73.99], 11);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{ maxZoom:19, attribution:'\u00a9 OpenStreetMap' }).addTo(mapObj);
+  }
+
+  // Rebuild the cluster group. The plugin merges nearby pins as you zoom out
+  // and splits them apart as you zoom in; disableClusteringAtZoom keeps
+  // individual pins visible once you're zoomed in close.
+  if(clusterGroup){ mapObj.removeLayer(clusterGroup); }
+  clusterGroup = L.markerClusterGroup({
+    iconCreateFunction: clusterIcon,
+    showCoverageOnHover: false,
+    maxClusterRadius: 70,
+    disableClusteringAtZoom: 15
+  });
+
+  zones.forEach(function(z){
+    var size = z.reportCount>=10?34:z.reportCount>=4?28:22;
+    var icon=L.divIcon({
+      className:'',
+      html:'<div class="cd-pin" style="width:'+size+'px;height:'+size+'px;">'+(z.reportCount>1?z.reportCount:'')+'</div>',
+      iconSize:[size,size], iconAnchor:[size/2,size/2]
+    });
+    var m=L.marker([z.lat,z.lng],{ icon:icon });
+    m.reportCount = z.reportCount;       // carried so clusters can sum it
+    m.on('click', function(){ openZone(z.slug); });
+    clusterGroup.addLayer(m);
+  });
+
+  mapObj.addLayer(clusterGroup);
+  setTimeout(function(){ mapObj.invalidateSize(); }, 60);
+
+  // On first open, try to centre on the user's location.
+  if(!locatedOnce){
+    locatedOnce=true;
+    locateUser();
+  }
+}
+
+// Ask the browser for the user's location; on success drop a "you are here"
+// pin and centre/zoom there. On denial or failure, leave the default view.
+function locateUser(){
+  if(!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(function(pos){
+    var lat=pos.coords.latitude, lng=pos.coords.longitude;
+    placeUserPin(lat,lng);
+    mapObj.setView([lat,lng], 14);
+  }, function(){
+    /* permission denied or unavailable — keep the default view */
+  }, { enableHighAccuracy:true, timeout:8000 });
+}
+
+function placeUserPin(lat,lng){
+  if(userMarker){ mapObj.removeLayer(userMarker); }
+  var icon=L.divIcon({ className:'', html:'<div class="cd-userpin"></div>', iconSize:[20,20], iconAnchor:[10,10] });
+  userMarker=L.marker([lat,lng],{ icon:icon, zIndexOffset:1000 }).addTo(mapObj);
+  userMarker.bindPopup('You are here');
+}
+
+// Geocode whatever the user typed (any city / address / place) using
+// Nominatim, OpenStreetMap's free geocoder — no API key required.
+// Needs a network connection; rate-limited, fine for human use.
+function doSearch(){
+  var q=document.getElementById('map-search').value.trim();
+  var msg=document.getElementById('search-msg');
+  if(!q){ msg.textContent=''; return; }
+  msg.textContent='Searching for \u201c'+q+'\u201d\u2026';
+  var url='https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(q);
+  fetch(url, { headers:{ 'Accept':'application/json' } })
+    .then(function(r){ return r.json(); })
+    .then(function(results){
+      if(!results || !results.length){
+        msg.textContent='No results for \u201c'+q+'\u201d. Try a city or full address.';
+        return;
+      }
+      var hit=results[0];
+      var lat=parseFloat(hit.lat), lng=parseFloat(hit.lon);
+      mapObj.setView([lat,lng], 13);
+      // How many reported zones fall near this view?
+      var near=ZONES.filter(function(z){
+        return Math.abs(z.lat-lat)<0.15 && Math.abs(z.lng-lng)<0.15;
+      });
+      msg.textContent = near.length
+        ? 'Showing '+hit.display_name.split(',')[0]+' \u2014 '+near.length+' reported zone'+(near.length===1?'':'s')+' nearby.'
+        : 'Showing '+hit.display_name.split(',')[0]+' \u2014 no reported zones here yet.';
+    })
+    .catch(function(){
+      msg.textContent='Search needs an internet connection. Please try again.';
+    });
+}
+
+/* ---------- audit (table for moderators / external auditors) ---------- */
+var auditEditingId = null;
+var auditStatusSelectFilled = false;
+
+function shortId(id){
+  // turn 'z42' into 'CD-0042' for the table
+  var n = parseInt(id.replace(/^z/, ''), 10) || 0;
+  return 'CD-' + String(n).padStart(4,'0');
+}
+function fmtShortDate(ts){
+  if(!ts) return '\u2014';
+  return new Date(ts).toLocaleDateString(undefined,{ year:'numeric', month:'short', day:'numeric' });
+}
+
+// "3 days ago" / "today" / "2 months ago" — friendlier than a raw date when
+// the gap matters more than the calendar value.
+function relativeDate(ts){
+  if(!ts) return 'unknown';
+  var diff = Date.now() - ts;
+  var days = Math.floor(diff / 86400000);
+  if(days < 1)   return 'today';
+  if(days === 1) return 'yesterday';
+  if(days < 30)  return days + ' days ago';
+  var months = Math.floor(days / 30);
+  if(months === 1) return '1 month ago';
+  if(months < 12)  return months + ' months ago';
+  var years = Math.floor(months / 12);
+  return years === 1 ? '1 year ago' : years + ' years ago';
+}
+
+function fillStatusOptions(){
+  if(auditStatusSelectFilled) return;
+  var filter=document.getElementById('audit-status');
+  var editor=document.getElementById('ae-status');
+  STATUSES.forEach(function(s){
+    filter.innerHTML += '<option value="'+s.id+'">'+s.label+'</option>';
+    editor.innerHTML += '<option value="'+s.id+'">'+s.label+'</option>';
+  });
+  auditStatusSelectFilled = true;
+}
+
+function renderAuditTable(){
+  fillStatusOptions();
+
+  // status counts for the stats strip (always shows totals across ALL zones,
+  // regardless of the table filter — that's the headline accountability data)
+  var counts={}; STATUSES.forEach(function(s){ counts[s.id]=0; });
+  ZONES.forEach(function(z){ counts[z.status] = (counts[z.status]||0) + 1; });
+  var statsHtml = STATUSES.map(function(s){
+    return '<div class="as-card">'+
+      '<div class="as-num">'+counts[s.id]+'</div>'+
+      '<div class="as-lbl"><span class="status-badge '+s.tone+'" style="font-size:10px; padding:1px 7px;">'+s.label+'</span></div>'+
+    '</div>';
+  }).join('');
+  document.getElementById('audit-stats').innerHTML = statsHtml;
+
+  // table rows (filtered by status + search query)
+  var q = document.getElementById('audit-q').value.trim().toLowerCase();
+  var statusFilter = document.getElementById('audit-status').value;
+  // sort by oldest first-reported date -> most-ignored at the top
+  var rows = ZONES.slice().sort(function(a,b){ return a.firstReportedAt - b.firstReportedAt; });
+  if(statusFilter !== '__all__'){
+    rows = rows.filter(function(z){ return z.status === statusFilter; });
+  }
+  if(q){
+    rows = rows.filter(function(z){
+      return shortId(z.id).toLowerCase().indexOf(q)>=0
+          || z.signZone.indexOf(q)>=0
+          || z.appZone.indexOf(q)>=0
+          || z.address.toLowerCase().indexOf(q)>=0;
+    });
+  }
+  document.getElementById('audit-tally').textContent = rows.length+' of '+ZONES.length+' zones';
+
+  var tbody = document.getElementById('audit-rows');
+  if(rows.length === 0){
+    tbody.innerHTML='<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--ink-faint);">No zones match.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(function(z){
+    var s = statusById(z.status);
+    return '<tr onclick="openAuditEditor(\''+z.id+'\')">'+
+      '<td class="id-cell">'+shortId(z.id)+'</td>'+
+      '<td class="zone-cell">'+z.signZone+' \u2260 '+z.appZone+'</td>'+
+      '<td>'+z.city+'</td>'+
+      '<td class="num">'+z.reportCount+'</td>'+
+      '<td><span class="status-badge '+s.tone+'">'+s.label+'</span></td>'+
+      '<td>'+fmtShortDate(z.firstReportedAt)+'</td>'+
+      '<td>'+fmtShortDate(z.lastReportedAt)+'</td>'+
+      '<td class="actions-cell">Edit \u2192</td>'+
+    '</tr>';
+  }).join('');
+}
+
+function openAuditEditor(zoneId){
+  var z = ZONES.find(function(x){ return x.id===zoneId; });
+  if(!z) return;
+  auditEditingId = zoneId;
+  document.getElementById('ae-id').textContent = shortId(z.id);
+  document.getElementById('ae-sign').textContent = z.signZone;
+  document.getElementById('ae-app').textContent = z.appZone;
+  document.getElementById('ae-count').textContent = z.reportCount;
+  document.getElementById('ae-addr').textContent = z.address +
+    ' \u00b7 ' + z.reporters.length + ' reporter'+(z.reporters.length===1?'':'s') +
+    ' \u00b7 first reported '+fmtShortDate(z.firstReportedAt) +
+    ' \u00b7 last reported '+fmtShortDate(z.lastReportedAt);
+  document.getElementById('ae-status').value = z.status;
+  document.getElementById('ae-note').value = z.auditNote || '';
+
+  // hide the table, show the editor (normal-flow swap, no overlay positioning)
+  document.getElementById('screen-audit').classList.remove('active');
+  document.getElementById('audit-editor-overlay').style.display = 'block';
+  window.scrollTo(0,0);
+}
+
+function closeAuditEditor(){
+  auditEditingId = null;
+  document.getElementById('audit-editor-overlay').style.display = 'none';
+  document.getElementById('screen-audit').classList.add('active');
+  renderAuditTable();
+  window.scrollTo(0,0);
+}
+
+function saveAuditEditor(){
+  if(!auditEditingId) { closeAuditEditor(); return; }
+  var z = ZONES.find(function(x){ return x.id===auditEditingId; });
+  if(z){
+    var newStatus = document.getElementById('ae-status').value;
+    var newNote = document.getElementById('ae-note').value.trim();
+    var changed = z.status !== newStatus || z.auditNote !== newNote;
+    z.status = newStatus;
+    z.auditNote = newNote;
+    if(changed) z.statusUpdatedAt = Date.now();
+  }
+  closeAuditEditor();
+}
+
+
+/* ---------- zone detail ---------- */
+function openZone(slug){
+  var z=ZONES.find(function(x){ return x.slug===slug; });
+  if(!z){ go('map'); return; }
+  function fd(ts){ return new Date(ts).toLocaleDateString(undefined,{ year:'numeric', month:'short', day:'numeric' }); }
+  var hist = z.reporters.map(function(r){
+    return '<li class="history-row"><span style="font-weight:500;">'+(r.name||'Anonymous')+'</span><span class="faint">'+fd(r.at)+'</span></li>';
+  }).join('');
+  if(z.reportCount>z.reporters.length){
+    hist += '<li class="history-row faint" style="justify-content:center;">+ '+(z.reportCount-z.reporters.length)+' more reports</li>';
+  }
+  document.getElementById('zone-detail-body').innerHTML =
+    '<button class="back-link" onclick="go(\'map\')">&larr; Mismatch map</button>'+
+    '<div class="card">'+
+      '<span class="mismatch-tag">⚑ Mismatch detected</span>'+
+      '<div class="zone-zones">'+
+        '<div class="zz"><span class="zz-label">Sign zone</span><span class="zz-num">'+z.signZone+'</span></div>'+
+        '<span class="zz-op">≠</span>'+
+        '<div class="zz"><span class="zz-label">App zone</span><span class="zz-num">'+z.appZone+'</span></div>'+
+      '</div>'+
+      '<div class="zone-facts"><span class="faint">📍 '+z.address+'</span>'+
+      '<span class="faint">🗓 Last reported '+fd(z.lastReportedAt)+'</span></div>'+
+      '<div class="count-banner"><span class="count-num">'+z.reportCount+'</span><span class="muted">reports</span></div>'+
+    '</div>'+
+    '<div class="history"><h2>Report history</h2><ul class="history-list">'+hist+'</ul></div>'+
+    '<div class="zone-cta"><p class="muted">Seeing this same mismatch? Add your report to the count.</p>'+
+    '<button class="btn btn-primary" onclick="startCheck()">Report or check a zone</button></div>';
+  go('zone');
+}
+
+renderStats();
+</script>
+</body>
+</html>
