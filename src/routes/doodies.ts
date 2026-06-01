@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { requireAuth } from "../middleware/auth";
-import type { AuthEnv } from "../auth";
+import { createAuth, type AuthEnv } from "../auth";
 import { generateSlug } from "../lib/slug";
 import {
   MAX_IMAGES,
@@ -133,7 +133,8 @@ function canSeeDoodie(
   if (doodie.moderation_status === "approved") return true;
   if (doodie.moderation_status === "removed" && !viewerIsAdmin) return false;
   if (!viewerId) return false;
-  if (viewerId === doodie.reporter_id) return true;
+  // null reporter_id means anonymous — no authenticated viewer can claim ownership
+  if (doodie.reporter_id && viewerId === doodie.reporter_id) return true;
   return viewerIsAdmin;
 }
 
@@ -172,15 +173,31 @@ function imageUrl(townSlug: string, doodieSlug: string, position: number) {
 }
 
 // POST /api/towns/:townSlug/doodies — file a new Doodie ----------------
+// Auth is optional — anonymous submissions are allowed for low friction.
+// If a valid session exists the reporter_id is recorded; otherwise null.
 
-doodies.post("/", requireAuth, async (c) => {
-  const user = c.get("user");
+doodies.post("/", async (c) => {
+  let userId: string | null = null;
+  try {
+    const auth = createAuth(c.env.DB, c.env);
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (session) {
+      const userRow = await c.env.DB.prepare(
+        'SELECT status FROM "user" WHERE id = ?'
+      )
+        .bind(session.user.id)
+        .first<{ status: string }>();
+      if (userRow?.status !== "banned" && userRow?.status !== "suspended") {
+        userId = session.user.id;
+      }
+    }
+  } catch {
+    /* no auth configured or session lookup failed — proceed anonymously */
+  }
+
   const townSlug = c.req.param("townSlug")!;
   const town = await loadTown(c.env.DB, townSlug);
   if (!town) return c.json({ error: "Town not found" }, 404);
-
-  const gateError = await profileGate(c.env.DB, user.id);
-  if (gateError) return c.json({ error: gateError }, 412);
 
   // Parse multipart body.
   const body = await c.req.parseBody({ all: true });
@@ -216,9 +233,11 @@ doodies.post("/", requireAuth, async (c) => {
   if (imageFiles.length > MAX_IMAGES) {
     return c.json({ error: `At most ${MAX_IMAGES} images.` }, 400);
   }
+  const validatedImages: { file: File; mime: string }[] = [];
   for (const f of imageFiles) {
-    const err = validateImageUpload(f);
-    if (err) return c.json({ error: err }, 400);
+    const { error, mime } = await validateImageUpload(f);
+    if (error) return c.json({ error }, 400);
+    validatedImages.push({ file: f, mime });
   }
 
   // Generate ID + unique-per-town slug.
@@ -246,8 +265,9 @@ doodies.post("/", requireAuth, async (c) => {
     mime_type: string;
     size_bytes: number;
   }[] = [];
-  for (let i = 0; i < imageFiles.length; i++) {
-    const stored = await storeImage(c.env.IMAGES, doodieId, i, imageFiles[i]);
+  for (let i = 0; i < validatedImages.length; i++) {
+    const { file, mime } = validatedImages[i];
+    const stored = await storeImage(c.env.IMAGES, doodieId, i, file, mime);
     imageRecords.push({ id: crypto.randomUUID(), position: i, ...stored });
   }
 
@@ -255,13 +275,13 @@ doodies.post("/", requireAuth, async (c) => {
   const stmts = [
     c.env.DB.prepare(
       `INSERT INTO doodie (id, slug, town_id, reporter_id, type, description,
-                           disability_related, lat, lng, reporter_ip)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                           disability_related, lat, lng, reporter_ip, moderation_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved')`
     ).bind(
       doodieId,
       slug,
       town.id,
-      user.id,
+      userId,
       type,
       description,
       disabilityRelated,
@@ -278,7 +298,7 @@ doodies.post("/", requireAuth, async (c) => {
     c.env.DB.prepare(
       `INSERT INTO doodie_audit (id, doodie_id, actor_id, action, ip_address)
        VALUES (?, ?, ?, 'created', ?)`
-    ).bind(crypto.randomUUID(), doodieId, user.id, ip),
+    ).bind(crypto.randomUUID(), doodieId, userId, ip),
   ];
   await c.env.DB.batch(stmts);
 
@@ -424,11 +444,14 @@ doodies.get("/:doodieSlug", async (c) => {
     return c.json({ error: "Not found" }, 404);
   }
 
-  const reporter = await c.env.DB.prepare(
-    `SELECT screen_name FROM "user" WHERE id = ?`
-  )
-    .bind(doodie.reporter_id)
-    .first<{ screen_name: string | null }>();
+  const reporter = doodie.reporter_id
+    ? await c.env.DB.prepare(`SELECT screen_name FROM "user" WHERE id = ?`)
+        .bind(doodie.reporter_id)
+        .first<{ screen_name: string | null }>()
+    : null;
+  const reporterName = doodie.reporter_id
+    ? (reporter?.screen_name ?? "(deleted)")
+    : "(anonymous)";
 
   const imgRows = await c.env.DB.prepare(
     `SELECT position FROM doodie_image WHERE doodie_id = ? ORDER BY position`
@@ -441,12 +464,7 @@ doodies.get("/:doodieSlug", async (c) => {
   }));
 
   return c.json({
-    doodie: publicDoodie(
-      doodie,
-      town,
-      reporter?.screen_name ?? "(deleted)",
-      images
-    ),
+    doodie: publicDoodie(doodie, town, reporterName, images),
   });
 });
 
@@ -636,14 +654,24 @@ doodies.delete("/:doodieSlug", requireAuth, async (c) => {
 });
 
 // POST /:doodieSlug/re-report — "I saw this same problem too" -----------
-// Increments report_count and updates last_reported_at. Requires a
-// complete profile (same gate as filing). One re-report per user per
-// doodie is enforced via the existing doodie_vote table's PK analogue —
-// we reuse doodie_vote with a dedicated 're-report' marker to avoid a new
-// table; see INSERT OR IGNORE below.
+// Auth is optional. Authenticated users are deduped via doodie_re_report.
+// Anonymous users increment the count without a dedup row (user_id NOT NULL
+// prevents storing null, so we accept occasional double-counts from anonymous).
 
-doodies.post("/:doodieSlug/re-report", requireAuth, async (c) => {
-  const user = c.get("user");
+doodies.post("/:doodieSlug/re-report", async (c) => {
+  let userId: string | null = null;
+  try {
+    const auth = createAuth(c.env.DB, c.env);
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (session) {
+      const userRow = await c.env.DB.prepare('SELECT status FROM "user" WHERE id = ?')
+        .bind(session.user.id).first<{ status: string }>();
+      if (userRow?.status !== "banned" && userRow?.status !== "suspended") {
+        userId = session.user.id;
+      }
+    }
+  } catch { /* anonymous */ }
+
   const townSlug = c.req.param("townSlug")!;
   const doodieSlug = c.req.param("doodieSlug")!;
   const town = await loadTown(c.env.DB, townSlug);
@@ -651,49 +679,47 @@ doodies.post("/:doodieSlug/re-report", requireAuth, async (c) => {
   const doodie = await loadDoodie(c.env.DB, town.id, doodieSlug);
   if (!doodie) return c.json({ error: "Not found" }, 404);
 
-  const admin = isAdmin(user, c.env.ADMIN_USER_IDS);
-  if (!canSeeDoodie(user.id, doodie, admin)) {
+  const admin = isAdmin({ id: userId ?? "" }, c.env.ADMIN_USER_IDS);
+  if (!canSeeDoodie(userId, doodie, admin)) {
     return c.json({ error: "Not found" }, 404);
   }
-  if (doodie.reporter_id === user.id) {
+  if (userId && doodie.reporter_id && userId === doodie.reporter_id) {
     return c.json({ error: "You filed this Doodie — it already counts as your report." }, 400);
   }
   if (doodie.moderation_status !== "approved") {
     return c.json({ error: "Can only re-report approved Doodies." }, 400);
   }
 
-  const gateError = await profileGate(c.env.DB, user.id);
-  if (gateError) return c.json({ error: gateError }, 412);
-
   const ip = ipOf(c);
 
-  // Guard against double-counting: if this user already re-reported, no-op.
-  const already = await c.env.DB.prepare(
-    `SELECT 1 FROM doodie_re_report WHERE doodie_id = ? AND user_id = ?`
-  )
-    .bind(doodie.id, user.id)
-    .first();
-  if (already) {
-    return c.json({ ok: true, report_count: doodie.report_count, already: true });
+  // Dedup for authenticated users only.
+  if (userId) {
+    const already = await c.env.DB.prepare(
+      `SELECT 1 FROM doodie_re_report WHERE doodie_id = ? AND user_id = ?`
+    ).bind(doodie.id, userId).first();
+    if (already) {
+      return c.json({ ok: true, report_count: doodie.report_count, already: true });
+    }
   }
 
   const now = new Date().toISOString().replace("T", " ").slice(0, 19);
-  await c.env.DB.batch([
+  const stmts: D1PreparedStatement[] = [];
+  if (userId) {
+    stmts.push(
+      c.env.DB.prepare(
+        `INSERT INTO doodie_re_report (doodie_id, user_id, ip_address) VALUES (?, ?, ?)`
+      ).bind(doodie.id, userId, ip)
+    );
+  }
+  stmts.push(
     c.env.DB.prepare(
-      `INSERT INTO doodie_re_report (doodie_id, user_id, ip_address) VALUES (?, ?, ?)`
-    ).bind(doodie.id, user.id, ip),
-    c.env.DB.prepare(
-      `UPDATE doodie
-       SET report_count = report_count + 1,
-           last_reported_at = ?,
-           updated_at = ?
-       WHERE id = ?`
+      `UPDATE doodie SET report_count = report_count + 1, last_reported_at = ?, updated_at = ? WHERE id = ?`
     ).bind(now, now, doodie.id),
     c.env.DB.prepare(
-      `INSERT INTO doodie_audit (id, doodie_id, actor_id, action, ip_address)
-       VALUES (?, ?, ?, 're-reported', ?)`
-    ).bind(crypto.randomUUID(), doodie.id, user.id, ip),
-  ]);
+      `INSERT INTO doodie_audit (id, doodie_id, actor_id, action, ip_address) VALUES (?, ?, ?, 're-reported', ?)`
+    ).bind(crypto.randomUUID(), doodie.id, userId, ip)
+  );
+  await c.env.DB.batch(stmts);
 
   return c.json({ ok: true, report_count: doodie.report_count + 1, already: false });
 });

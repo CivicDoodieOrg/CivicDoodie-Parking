@@ -11,8 +11,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.min.css" rel="stylesheet" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exifreader/dist/exif-reader.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/heic-to@1.5.2/dist/iife/heic-to.js"></script>
 <style>
   :root {
     --ink:#1a1714; --ink-soft:#5a544c; --ink-faint:#918a7f;
@@ -136,6 +137,10 @@
   .loc-grid dd { font-size:14px; font-weight:500; color:var(--ink); }
   .loc-wrong-btn { background:none; border:none; color:var(--signal-dark); font-size:13px; font-weight:500; text-decoration:underline; padding:0; }
   .loc-wrong-btn:hover { color:var(--signal); }
+  #loc-mini-map { width:100%; height:200px; border-radius:8px; margin:10px 0 10px; overflow:hidden; }
+  #loc-mini-map .leaflet-control-attribution { display:none; }
+  #loc-mini-map .leaflet-control-zoom { margin:8px; }
+  #loc-mini-map .leaflet-control-zoom a { width:24px; height:24px; line-height:24px; font-size:15px; }
   .privacy-note { margin-top:-6px; }
   .nav-row { display:flex; gap:10px; margin-top:24px; }
   .nav-next { flex:1; }
@@ -316,6 +321,7 @@
             <div><dt>City</dt><dd id="loc-city">&mdash;</dd></div>
             <div><dt>Address</dt><dd id="loc-address">&mdash;</dd></div>
           </dl>
+          <div id="loc-mini-map"></div>
           <button id="loc-wrong-btn" class="loc-wrong-btn" onclick="enableManualLocation()">
             Location wrong? Use my location instead
           </button>
@@ -621,12 +627,13 @@ function statCard(n,l){ return '<div class="stat"><span class="stat-num">'+n+'</
    Mismatch is NOT shown until step 2. Submit happens at the end of step 2. */
 var TOTAL=2, step=1;
 var state={ photo:false, sign:'', app:'', loc:null, manualLoc:false, name:'',
-            priorReports:0, resultCount:0, resultSlug:'' };
+            priorReports:0, resultCount:0, resultSlug:'', compressedPhoto:null };
 
 function startCheck(){
   step=1;
   state={ photo:false, sign:'', app:'', loc:null, manualLoc:false, name:'',
-          priorReports:0, resultCount:0, resultSlug:'' };
+          priorReports:0, resultCount:0, resultSlug:'', compressedPhoto:null };
+  photoCompressionPromise=null;
   // Pre-fetch live pins so nearbyDoodie() works in renderVerdict without delay.
   if(LIVE_ZONES.length===0){
     apiFetch('/api/map').then(function(d){ LIVE_ZONES=d.pins||[]; }).catch(function(){});
@@ -685,49 +692,171 @@ function syncZones(){
   renderCheck();
 }
 
+// Read first 16 bytes and return the actual MIME type from magic bytes.
+function sniffMime(file){
+  return new Promise(function(resolve){
+    var reader=new FileReader();
+    reader.onload=function(e){
+      var b=new Uint8Array(e.target.result);
+      if(b[0]===0xFF&&b[1]===0xD8&&b[2]===0xFF){ resolve('image/jpeg'); return; }
+      if(b[0]===0x89&&b[1]===0x50&&b[2]===0x4E&&b[3]===0x47){ resolve('image/png'); return; }
+      if(b[0]===0x52&&b[1]===0x49&&b[2]===0x46&&b[3]===0x46&&
+         b[8]===0x57&&b[9]===0x45&&b[10]===0x42&&b[11]===0x50){ resolve('image/webp'); return; }
+      // ISOBMFF container (HEIC / HEIF / AVIF): 'ftyp' box starts at byte 4
+      if(b[4]===0x66&&b[5]===0x74&&b[6]===0x79&&b[7]===0x70){
+        var brand=String.fromCharCode(b[8],b[9],b[10],b[11]).trim();
+        console.log('[sniff] ISOBMFF brand:', brand);
+        resolve(brand==='avif'||brand==='avis' ? 'image/avif' : 'image/heic');
+        return;
+      }
+      resolve('');
+    };
+    reader.onerror=function(){ resolve(''); };
+    reader.readAsArrayBuffer(file.slice(0,16));
+  });
+}
+
+// Decode a HEIC/HEIF file to a JPEG Blob via heic-to (libheif 1.21 WASM — no OS codec needed).
+function decodeHeicToJpeg(file){
+  return HeicTo({ blob: file, type: 'image/jpeg', quality: 0.92 })
+    .then(function(jpeg){
+      console.log('[heic-to] converted ok: '+jpeg.size+'B');
+      return jpeg;
+    })
+    .catch(function(err){
+      throw new Error('HEIC conversion failed: '+(err && err.message ? err.message : String(err)));
+    });
+}
+
+// Step 1: detect real format via magic bytes, then decode to a browser-renderable blob.
+// • JPEG / PNG / WebP → pass through directly
+// • AVIF → Chrome 85+ decodes natively; just tag the blob correctly
+// • HEIC / HEIF → heic-to (libheif WASM) → JPEG
+function maybeConvertHeic(file){
+  return sniffMime(file).then(function(sniffed){
+    var mime=sniffed||file.type;
+    console.log('[photo]', file.name, '| sniffed:', sniffed||'(unknown)', '| using:', mime);
+
+    if(['image/jpeg','image/png','image/webp','image/gif'].indexOf(mime)>=0) return file;
+
+    if(mime==='image/avif'){
+      console.log('[photo] treating as AVIF (browser-native)');
+      return new Blob([file],{type:'image/avif'});
+    }
+
+    if(mime==='image/heic'||mime==='image/heif'){
+      console.log('[heic] decoding with heic-to...');
+      return decodeHeicToJpeg(file);
+    }
+
+    console.warn('[photo] unknown format "'+mime+'", attempting direct load');
+    return file;
+  });
+}
+
+// Step 2: draw onto a canvas and export as JPEG at max 1200px / 0.82 quality.
+function canvasResize(blob){
+  return new Promise(function(resolve, reject){
+    console.log('[canvas] resizing', blob.type, blob.size+'B');
+    var img=new Image(), url=URL.createObjectURL(blob);
+    img.onload=function(){
+      var MAX=1200;
+      var scale=Math.min(1, MAX/Math.max(img.naturalWidth||1, img.naturalHeight||1));
+      var w=Math.round(img.naturalWidth*scale), h=Math.round(img.naturalHeight*scale);
+      console.log('[canvas] '+img.naturalWidth+'x'+img.naturalHeight+' → '+w+'x'+h);
+      var canvas=document.createElement('canvas');
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(function(out){
+        if(out){ console.log('[canvas] JPEG out:', out.size+'B'); resolve(out); }
+        else reject(new Error('toBlob returned null'));
+      },'image/jpeg',0.82);
+    };
+    img.onerror=function(){
+      console.warn('[canvas] img load failed for blob type:', blob.type, blob.size+'B');
+      URL.revokeObjectURL(url);
+      reject(new Error('canvas could not decode blob ('+blob.type+')'));
+    };
+    img.src=url;
+  });
+}
+
+var photoCompressionPromise=null;
+
 function onPhoto(e){
   var f=e.target.files && e.target.files[0];
   if(!f) return;
   state.photo=true;
-  var url=URL.createObjectURL(f);
-  document.getElementById('photo-thumb').src=url;
-  document.getElementById('photo-preview').style.display='block';
+  state.compressedPhoto=null;
+  // Hide preview until we have a JPEG to show — raw HEIC won't render in Chrome.
+  document.getElementById('photo-preview').style.display='none';
   document.getElementById('loc-block').style.display='block';
-  var ocr=document.getElementById('ocr-status');
-  ocr.style.display='flex';
+  document.getElementById('ocr-status').style.display='flex';
 
-  // EXIF and OCR run in parallel; each updates state independently.
+  // EXIF must read from the original file — canvas conversion strips EXIF metadata.
   resolveExifLocation(f);
 
-  preprocessForOcr(f).then(function(blob){
-    return Tesseract.recognize(blob,'eng',{
-      tessedit_pageseg_mode:'11',  // sparse text — best for mixed sign layouts
-      tessedit_char_whitelist:'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_ '
+  // Decode HEIC if needed, then branch into OCR + compression in parallel.
+  console.log('[photo] pipeline start');
+  photoCompressionPromise=maybeConvertHeic(f)
+    .then(function(decodable){
+      console.log('[photo] decodable blob:', decodable.type, decodable.size+'B');
+      // OCR: preprocess → Tesseract. Runs in parallel with canvasResize below.
+      preprocessForOcr(decodable).then(function(ocrBlob){
+        return Tesseract.recognize(ocrBlob,'eng',{
+          tessedit_ocr_engine_mode:'1',
+          tessedit_pageseg_mode:'11',
+          tessedit_char_whitelist:'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-'
+        });
+      }).then(function(result){
+        console.log('[OCR raw]', result.data.text);
+        var zone=extractZoneCode(result.data.text);
+        if(zone) document.getElementById('sign-zone').value=zone;
+        document.getElementById('ocr-status').style.display='none';
+        renderCheck();
+      }).catch(function(){
+        document.getElementById('ocr-status').style.display='none';
+        renderCheck();
+      });
+      // Compression: resize to 1200px JPEG for preview + submission.
+      return canvasResize(decodable);
+    })
+    .then(function(jpeg){
+      state.compressedPhoto=jpeg;
+      console.log('[compress] ok', jpeg.size, 'bytes');
+      document.getElementById('photo-thumb').src=URL.createObjectURL(jpeg);
+      document.getElementById('photo-preview').style.display='block';
+      renderCheck();
+      return jpeg;
+    })
+    .catch(function(err){
+      console.warn('[photo pipeline]', err);
+      // Show the preview area with an error note instead of a broken image.
+      var thumb=document.getElementById('photo-thumb');
+      thumb.removeAttribute('src');
+      thumb.alt=err.message||'Image could not be processed.';
+      document.getElementById('photo-preview').style.display='block';
+      document.getElementById('ocr-status').style.display='none';
+      // Keep state.photo=true so the user can still submit (without an attached image).
+      alert('Photo note: '+( err.message||'Could not process this image format.')+'\nYou can still submit your report — the photo just won\'t be attached.');
+      renderCheck();
+      return null;
     });
-  }).then(function(result){
-    console.log('[OCR raw]', result.data.text);
-    var zone=extractZoneCode(result.data.text);
-    if(zone) document.getElementById('sign-zone').value=zone;
-    ocr.style.display='none';
-    renderCheck();
-  }).catch(function(){
-    ocr.style.display='none';
-    renderCheck();
-  });
 
   renderCheck();
 }
 
-// Render the image to a canvas, convert to grayscale, boost contrast,
-// then export as a PNG blob for Tesseract. High-contrast greyscale
-// dramatically improves accuracy on meter/sign photos.
+// Preprocess for Tesseract: grayscale + contrast stretch + push toward B/W.
+// Upscales small images so the zone number is at least 1800px across the long side.
 function preprocessForOcr(file){
   return new Promise(function(resolve, reject){
     var img=new Image();
     var objUrl=URL.createObjectURL(file);
     img.onload=function(){
-      var MAX=1600;
-      var scale=Math.min(1, MAX/Math.max(img.naturalWidth,img.naturalHeight));
+      var longSide=Math.max(img.naturalWidth,img.naturalHeight);
+      // Upscale if small; cap at 2400px to avoid huge canvases.
+      var scale = longSide < 1800 ? 1800/longSide : Math.min(1, 2400/longSide);
       var w=Math.round(img.naturalWidth*scale);
       var h=Math.round(img.naturalHeight*scale);
       var canvas=document.createElement('canvas');
@@ -736,12 +865,19 @@ function preprocessForOcr(file){
       ctx.drawImage(img,0,0,w,h);
       var id=ctx.getImageData(0,0,w,h);
       var d=id.data;
+      // Pass 1: find luma range for contrast stretch.
+      var lo=255, hi=0;
       for(var i=0;i<d.length;i+=4){
-        // Greyscale (luminance)
         var lum=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
-        // Boost contrast: push towards black or white
-        lum=lum<128 ? Math.max(0,lum-40) : Math.min(255,lum+40);
-        d[i]=d[i+1]=d[i+2]=lum;
+        if(lum<lo) lo=lum; if(lum>hi) hi=lum;
+      }
+      var range=hi-lo||1;
+      // Pass 2: stretch to 0–255, then push further toward black/white.
+      for(var i=0;i<d.length;i+=4){
+        var lum=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+        var s=(lum-lo)/range*255;
+        s=s<128 ? Math.max(0,s-40) : Math.min(255,s+40);
+        d[i]=d[i+1]=d[i+2]=s;
       }
       ctx.putImageData(id,0,0);
       URL.revokeObjectURL(objUrl);
@@ -753,26 +889,38 @@ function preprocessForOcr(file){
 }
 
 // Pull a parking zone code out of raw Tesseract text.
-// Tries labeled patterns first ("Zone M-12"), then letter+digit codes, then
-// long numeric codes. Returns empty string if nothing plausible is found.
+// Collects all candidate digit runs and prefers 5-digit codes (ParkMobile standard).
 function extractZoneCode(text){
   if(!text) return '';
-  var m=text.match(/\b(?:zone|area|block|meter)\s*:?\s*([A-Z0-9][A-Z0-9\-]{0,7})/i);
+  // 1. Explicit keyword label — highest confidence.
+  var m=text.match(/\b(?:zone|area|block|meter)\s*[:#]?\s*([A-Z0-9][A-Z0-9\-]{0,7})/i);
   if(m) return m[1].toUpperCase();
+
+  // 2. Collect all 4–6 digit runs; prefer exactly 5 digits (ParkMobile standard).
+  var runs=[], re=/\b(\d{4,6})\b/g, hit;
+  while((hit=re.exec(text))!==null) runs.push(hit[1]);
+  if(runs.length){
+    var five=runs.filter(function(d){ return d.length===5; });
+    if(five.length) return five[0]; // first 5-digit hit (Tesseract reads top→bottom)
+    return runs[0];                 // fallback: first 4 or 6 digit run
+  }
+
+  // 3. Letter+digit code (e.g. M-1234, AB567).
   m=text.match(/\b([A-Z]{1,3}[-_]?\d{1,5})\b/i);
   if(m) return m[1].toUpperCase();
-  m=text.match(/\b(\d{4,6})\b/);
-  if(m) return m[1];
+
   return '';
 }
 
 function resolveExifLocation(file){
-  exifr.gps(file).then(function(pos){
-    console.log('[EXIF gps]', pos);
-    if(pos && pos.latitude!=null){
-      reverseGeocode(pos.latitude,pos.longitude).then(function(place){
+  ExifReader.load(file, { expanded: true }).then(function(tags){
+    var gps = tags.gps;
+    console.log('[EXIF gps]', gps);
+    if(gps && gps.Latitude != null && gps.Longitude != null){
+      var lat = gps.Latitude, lng = gps.Longitude;
+      reverseGeocode(lat, lng).then(function(place){
         state.loc={
-          lat:pos.latitude, lng:pos.longitude,
+          lat:lat, lng:lng,
           country:place.country, state:place.state, city:place.city,
           address:place.address, cityKey:place.city||'Unknown', fromExif:true
         };
@@ -782,9 +930,9 @@ function resolveExifLocation(file){
       }).catch(function(){
         // Reverse-geocode failed but we have coords — show them raw.
         state.loc={
-          lat:pos.latitude, lng:pos.longitude,
+          lat:lat, lng:lng,
           country:'', state:'', city:'',
-          address:pos.latitude.toFixed(5)+', '+pos.longitude.toFixed(5),
+          address:lat.toFixed(5)+', '+lng.toFixed(5),
           cityKey:'', fromExif:true
         };
         state.manualLoc=false;
@@ -809,6 +957,87 @@ function noExifLocation(){
   renderCheck();
 }
 
+var miniMap=null, miniMarker=null, miniCircle=null, miniOrigin=null;
+
+// accuracyM: radius of the draggable zone in metres (GPS accuracy or 30m for EXIF).
+function updateMiniMap(lat, lng, accuracyM){
+  accuracyM = accuracyM || 30;
+  miniOrigin = { lat:lat, lng:lng };
+
+  if(!miniMap){
+    miniMap=L.map('loc-mini-map',{
+      zoomControl:false, attributionControl:false, scrollWheelZoom:false
+    });
+    L.control.zoom({ position:'topright' }).addTo(miniMap);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{ maxZoom:19 }).addTo(miniMap);
+  }
+
+  // Dashed accuracy circle — shows how far the pin can be moved.
+  if(miniCircle){
+    miniCircle.setLatLng([lat,lng]);
+    miniCircle.setRadius(accuracyM);
+  } else {
+    miniCircle=L.circle([lat,lng],{
+      radius:accuracyM, color:'#d8442b', weight:1.5, dashArray:'5 4',
+      fillColor:'#d8442b', fillOpacity:0.07
+    }).addTo(miniMap);
+  }
+
+  var icon=L.divIcon({
+    className:'',
+    html:'<div class="cd-pin" style="width:18px;height:18px;cursor:grab;"></div>',
+    iconSize:[18,18], iconAnchor:[9,9]
+  });
+
+  if(miniMarker){
+    miniMarker.setLatLng([lat,lng]);
+  } else {
+    miniMarker=L.marker([lat,lng],{ icon:icon, draggable:true }).addTo(miniMap);
+
+    miniMarker.on('dragend', function(e){
+      var pos=e.target.getLatLng();
+      var origin=L.latLng(miniOrigin.lat, miniOrigin.lng);
+      var radius=miniCircle.getRadius();
+      var dist=origin.distanceTo(pos);
+      // Clamp to the circle edge if dragged outside.
+      if(dist > radius){
+        var ratio=radius/dist;
+        pos=L.latLng(
+          origin.lat+(pos.lat-origin.lat)*ratio,
+          origin.lng+(pos.lng-origin.lng)*ratio
+        );
+        miniMarker.setLatLng(pos);
+      }
+      state.loc.lat=pos.lat;
+      state.loc.lng=pos.lng;
+      document.getElementById('loc-address').textContent='Looking up…';
+      nearestRoad(pos.lat, pos.lng).then(function(road){
+        state.loc.address=road;
+        document.getElementById('loc-address').textContent=road;
+      }).catch(function(){
+        var fallback=pos.lat.toFixed(5)+', '+pos.lng.toFixed(5);
+        state.loc.address=fallback;
+        document.getElementById('loc-address').textContent=fallback;
+      });
+    });
+  }
+
+  miniMap.setView([lat,lng], 18);
+  setTimeout(function(){ miniMap.invalidateSize(); },80);
+}
+
+// Single-call road lookup used after a marker drag — just the nearest road
+// name at street level (zoom 17), no intersection detection needed.
+function nearestRoad(lat, lng){
+  var url='https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lon='+lng+'&zoom=17&addressdetails=1';
+  return fetch(url,{ headers:{'Accept':'application/json'} })
+    .then(function(r){ if(!r.ok) throw new Error(); return r.json(); })
+    .then(function(d){
+      var a=d.address||{};
+      return a.road||a.pedestrian||a.footway||a.path||(d.display_name||'').split(',')[0];
+    });
+}
+
 function showExifLocation(){
   document.getElementById('exif-loc').style.display='block';
   document.getElementById('loc-manual').style.display='none';
@@ -820,6 +1049,7 @@ function showExifLocation(){
   document.getElementById('loc-state').textContent=state.loc.state;
   document.getElementById('loc-city').textContent=state.loc.city;
   document.getElementById('loc-address').textContent=state.loc.address;
+  updateMiniMap(state.loc.lat, state.loc.lng);
 }
 
 // "Location wrong?" — switch from the EXIF breakdown to manual entry.
@@ -840,6 +1070,7 @@ function useLocation(){
   if(!navigator.geolocation){ btn.textContent='Location unavailable'; return; }
   navigator.geolocation.getCurrentPosition(function(pos){
     var lat=pos.coords.latitude, lng=pos.coords.longitude;
+    console.log('[GPS coords]', lat, lng, 'accuracy:', pos.coords.accuracy, 'm');
     btn.textContent='Looking up address\u2026';
     // Reverse-geocode the coordinates so the user sees Country/State/City/Address
     // instead of raw numbers \u2014 same UI as the EXIF happy path.
@@ -860,6 +1091,7 @@ function useLocation(){
       document.getElementById('loc-state').textContent=place.state   || '\u2014';
       document.getElementById('loc-city').textContent=place.city     || '\u2014';
       document.getElementById('loc-address').textContent=place.address || '\u2014';
+      updateMiniMap(lat, lng, pos.coords.accuracy);
       renderCheck();
     }).catch(function(){
       // Reverse-geocode failed (offline, rate-limited, etc.). Keep manual
@@ -880,20 +1112,42 @@ function useLocation(){
   }, function(){ btn.textContent='Location not shared \u2014 type an address instead'; });
 }
 
-// Reverse-geocode lat/lng -> { country, state, city, address } via Nominatim
-// (same service used by the map search). No API key. Online-only.
+// Reverse-geocode lat/lng -> { country, state, city, address } via Nominatim.
+// Makes two simultaneous calls — exact point + a ~12 m diagonal offset. If
+// they return different road names we're at an intersection and show both
+// ("Road A & Road B"). If both agree we're on a single road, show house
+// number + road when available.
 function reverseGeocode(lat,lng){
-  var url='https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lon='+lng+'&zoom=18&addressdetails=1';
-  return fetch(url, { headers:{ 'Accept':'application/json' } })
-    .then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.json(); })
-    .then(function(d){
-      var a=d.address||{};
-      var streetParts=[a.house_number, a.road].filter(Boolean);
+  var h={ 'Accept':'application/json' };
+  var base='https://nominatim.openstreetmap.org/reverse?format=json&zoom=18&addressdetails=1';
+  var D=0.00011; // ~12 m in each axis
+  function nomiCall(la,lo){
+    return fetch(base+'&lat='+la+'&lon='+lo, { headers:h })
+      .then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.json(); });
+  }
+  function roadOf(d){
+    var a=d.address||{};
+    return a.road || a.pedestrian || a.footway || a.path || '';
+  }
+  return Promise.all([nomiCall(lat,lng), nomiCall(lat+D,lng+D), nomiCall(lat-D,lng-D)])
+    .then(function(results){
+      var d=results[0], a=d.address||{};
+      var roads=results.map(roadOf).filter(Boolean);
+      var unique=roads.filter(function(r,i){ return roads.indexOf(r)===i; });
+      console.log('[Nominatim]', d.display_name, a, '| roads found:', unique);
+      var streetAddr;
+      if(unique.length>=2){
+        streetAddr=unique[0]+' & '+unique[1];
+      } else if(a.house_number && unique[0]){
+        streetAddr=a.house_number+' '+unique[0];
+      } else {
+        streetAddr=unique[0] || (d.display_name||'').split(',')[0];
+      }
       return {
-        country: a.country || '',
-        state:   a.state || a.region || '',
-        city:    a.city || a.town || a.village || a.suburb || a.county || '',
-        address: streetParts.length ? streetParts.join(' ') : (d.display_name || '').split(',')[0]
+        country: a.country||'',
+        state:   a.state||a.region||'',
+        city:    a.city||a.town||a.village||a.suburb||a.county||'',
+        address: streetAddr
       };
     });
 }
@@ -906,6 +1160,16 @@ function checkNext(){
     if(state.manualLoc && state.loc){
       var typed=document.getElementById('addr').value.trim();
       if(typed) state.loc.address=typed;
+    }
+    // Snapshot the marker's live position as the authoritative lat/lng.
+    // Covers the case where the user dragged the pin and hit Continue before
+    // the address lookup finished — the coordinates are still correct even if
+    // the address field is still showing "Looking up…".
+    if(miniMarker && state.loc){
+      var mPos=miniMarker.getLatLng();
+      state.loc.lat=mPos.lat;
+      state.loc.lng=mPos.lng;
+      console.log('[Continue] using pin position', mPos.lat, mPos.lng);
     }
     renderVerdict();
     renderLocSummary();
@@ -988,6 +1252,9 @@ function submitReport(){
     }
   }
 
+  // Wait for any in-progress image compression before submitting.
+  (photoCompressionPromise || Promise.resolve(null)).then(function(){
+
   // Re-report if there is already a doodie within ~55 m of the reported location.
   var nearby = lat!=null && lng!=null ? nearbyDoodie(lat,lng) : null;
 
@@ -1012,12 +1279,14 @@ function submitReport(){
     form.append('description','Sign shows zone '+state.sign+' but app shows '+state.app);
     if(lat!=null){ form.append('lat',String(lat)); form.append('lng',String(lng)); }
     form.append('disability_related','0');
-    var fileInput=document.getElementById('photo-input');
-    if(fileInput.files && fileInput.files[0]) form.append('images',fileInput.files[0]);
+    var photoBlob=state.compressedPhoto;
+    if(photoBlob) form.append('images', photoBlob, 'photo.jpg');
     return apiFetch('/api/towns/'+townSlug+'/doodies',{ method:'POST', body:form });
   }).then(function(data){
     onSuccess(data.slug, 1);
   }).catch(onError);
+
+  }).catch(onError); // closes photoCompressionPromise.then
 }
 
 function nearestCityObj(lat,lng){
