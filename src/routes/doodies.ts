@@ -84,6 +84,14 @@ async function loadTown(db: D1Database, slug: string) {
     }>();
 }
 
+function townSlugFrom(city: string, state: string): string {
+  return `${city}-${state}`
+    .toLowerCase()
+    .normalize("NFD").replace(/\p{M}/gu, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 type FixState = "unresolved" | "investigating" | "resolved_unconfirmed";
 
 interface DoodieRow {
@@ -196,11 +204,33 @@ doodies.post("/", async (c) => {
   }
 
   const townSlug = c.req.param("townSlug")!;
-  const town = await loadTown(c.env.DB, townSlug);
-  if (!town) return c.json({ error: "Town not found" }, 404);
 
-  // Parse multipart body.
+  // Parse body before the town lookup so town-creation fields are available
+  // when the slug doesn't exist yet.
   const body = await c.req.parseBody({ all: true });
+
+  let town = await loadTown(c.env.DB, townSlug);
+
+  if (!town) {
+    const autoCity    = single(body.town_city).trim();
+    const autoState   = single(body.town_state).trim();
+    const autoCountry = single(body.town_country).trim();
+    const autoLat     = parseFloat(single(body.town_lat));
+    const autoLng     = parseFloat(single(body.town_lng));
+    if (
+      autoCity && autoState && autoCountry &&
+      Number.isFinite(autoLat) && autoLat >= -90 && autoLat <= 90 &&
+      Number.isFinite(autoLng) && autoLng >= -180 && autoLng <= 180
+    ) {
+      const computedSlug = townSlugFrom(autoCity, autoState);
+      await c.env.DB.prepare(
+        `INSERT OR IGNORE INTO town (id, slug, name, state_or_region, country, lat, lng)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).bind(computedSlug, computedSlug, autoCity, autoState, autoCountry, autoLat, autoLng).run();
+      town = await loadTown(c.env.DB, computedSlug);
+    }
+    if (!town) return c.json({ error: "Town not found" }, 404);
+  }
   const type = single(body.type);
   if (!VALID_TYPES.includes(type as DoodieType)) {
     return c.json(

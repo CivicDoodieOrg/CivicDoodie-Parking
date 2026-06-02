@@ -914,8 +914,10 @@ function resolveExifLocation(file){
       reverseGeocode(lat, lng).then(function(place){
         state.loc={
           lat:lat, lng:lng,
-          country:place.country, state:place.state, city:place.city,
-          address:place.address, cityKey:place.city||'Unknown', fromExif:true
+          country:place.country, state:place.state,
+          stateCode:place.stateCode, countryCode:place.countryCode,
+          city:place.city, address:place.address,
+          cityKey:place.city||'Unknown', fromExif:true
         };
         state.manualLoc=false;
         showExifLocation();
@@ -1070,8 +1072,10 @@ function useLocation(){
     reverseGeocode(lat,lng).then(function(place){
       state.loc={
         lat:lat, lng:lng,
-        country:place.country, state:place.state, city:place.city,
-        address:place.address, cityKey:place.city || 'Unknown', fromExif:false
+        country:place.country, state:place.state,
+        stateCode:place.stateCode, countryCode:place.countryCode,
+        city:place.city, address:place.address,
+        cityKey:place.city || 'Unknown', fromExif:false
       };
       // hide the manual-entry block, show the breakdown card instead
       document.getElementById('loc-manual').style.display='none';
@@ -1137,10 +1141,12 @@ function reverseGeocode(lat,lng){
         streetAddr=unique[0] || (d.display_name||'').split(',')[0];
       }
       return {
-        country: a.country||'',
-        state:   a.state||a.region||'',
-        city:    a.city||a.town||a.village||a.suburb||a.county||'',
-        address: streetAddr
+        country:     a.country||'',
+        state:       a.state||a.region||'',
+        stateCode:   (a['ISO3166-2-lvl4']||'').split('-').pop().toUpperCase(),
+        countryCode: (a.country_code||'').toUpperCase(),
+        city:        a.city||a.town||a.village||a.suburb||a.county||'',
+        address:     streetAddr
       };
     });
 }
@@ -1261,9 +1267,14 @@ function submitReport(){
   }
 
   // No nearby doodie -- file a new one.
-  var townPromise = lat!=null && lng!=null
-    ? nearestTownSlug(lat,lng)
-    : Promise.resolve(null);
+  // If EXIF/GPS gave us city + state abbreviation, compute the slug directly
+  // and pass town-creation fields so the backend can create it if needed.
+  // Otherwise fall back to the distance-based lookup against existing towns.
+  var loc=state.loc||{};
+  var hasTownFields = loc.city && loc.stateCode;
+  var townPromise = hasTownFields
+    ? Promise.resolve(toTownSlug(loc.city, loc.stateCode))
+    : (lat!=null && lng!=null ? nearestTownSlug(lat,lng) : Promise.resolve(null));
 
   townPromise.then(function(townSlug){
     if(!townSlug) throw new Error('No town found near your location — make sure location is set.');
@@ -1272,6 +1283,13 @@ function submitReport(){
     form.append('description','Sign shows zone '+state.sign+' but app shows '+state.app);
     if(lat!=null){ form.append('lat',String(lat)); form.append('lng',String(lng)); }
     form.append('disability_related','0');
+    if(hasTownFields){
+      form.append('town_city',    loc.city);
+      form.append('town_state',   loc.stateCode);
+      form.append('town_country', loc.countryCode||'US');
+      form.append('town_lat',     String(loc.lat));
+      form.append('town_lng',     String(loc.lng));
+    }
     var photoBlob=state.compressedPhoto;
     if(photoBlob) form.append('images', photoBlob, 'photo.jpg');
     return apiFetch('/api/towns/'+townSlug+'/doodies',{ method:'POST', body:form });
@@ -1298,6 +1316,15 @@ function nearbyDoodie(lat,lng){
     return z.lat!=null && z.lng!=null &&
       Math.abs(z.lat-lat)<threshold && Math.abs(z.lng-lng)<threshold;
   }) || null;
+}
+
+// Converts city + 2-letter state code to a URL slug (e.g. "Greenwich","CT" → "greenwich-ct").
+function toTownSlug(city, stateCode){
+  return (city+'-'+stateCode)
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .replace(/[^a-z0-9]+/g,'-')
+    .replace(/^-|-$/g,'');
 }
 
 // Finds the nearest town slug from the Worker's /api/towns list.

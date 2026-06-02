@@ -27,6 +27,7 @@ CREATE TABLE doodie_new (
   last_reported_at  TEXT NOT NULL DEFAULT (datetime('now')),
   fix_state         TEXT NOT NULL DEFAULT 'unresolved'
     CHECK (fix_state IN ('unresolved', 'investigating', 'resolved_unconfirmed')),
+  reporter_name TEXT,
   FOREIGN KEY (town_id)    REFERENCES town(id)   ON DELETE CASCADE,
   FOREIGN KEY (reporter_id) REFERENCES "user"(id) ON DELETE SET NULL,
   UNIQUE(town_id, slug)
