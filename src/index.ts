@@ -59,7 +59,7 @@ app.get("/api/health", (c) => {
 // Includes town_slug so the client can deep-link to the right town context.
 app.get("/api/map", async (c) => {
   const rows = await c.env.DB.prepare(
-    `SELECT d.id, d.slug, t.slug AS town_slug, d.type,
+    `SELECT d.id, d.slug, t.slug AS town_slug, t.name AS town_name, d.type,
             d.lat, d.lng, d.report_count, d.fix_state,
             d.upvotes_count, d.downvotes_count
      FROM doodie d
@@ -67,7 +67,7 @@ app.get("/api/map", async (c) => {
      WHERE d.moderation_status = 'approved'
        AND d.lat IS NOT NULL AND d.lng IS NOT NULL`
   ).all<{
-    id: string; slug: string; town_slug: string; type: string;
+    id: string; slug: string; town_slug: string; town_name: string; type: string;
     lat: number; lng: number; report_count: number; fix_state: string;
     upvotes_count: number; downvotes_count: number;
   }>();
