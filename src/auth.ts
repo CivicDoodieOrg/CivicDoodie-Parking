@@ -1,5 +1,5 @@
 import { betterAuth } from "better-auth";
-import { bearer } from "better-auth/plugins";
+import { bearer, username } from "better-auth/plugins";
 import { Kysely } from "kysely";
 import { D1Dialect } from "kysely-d1";
 
@@ -20,8 +20,11 @@ export type AuthEnv = {
 };
 
 const STATIC_TRUSTED_ORIGINS = [
-  "http://localhost:5173",
-  "http://localhost:8787",
+  // Local dev: trust any localhost / 127.0.0.1 port so the mockup can be
+  // served from whatever static-file port (5050, 5500, 8000, …) without
+  // tripping better-auth's CSRF origin check on cookied requests.
+  "http://localhost:*",
+  "http://127.0.0.1:*",
   "https://parking.civicdoodie.org",
   "https://parking-staging.civicdoodie.org",
 ];
@@ -53,6 +56,23 @@ export function createAuth(d1: D1Database, env: AuthEnv) {
       db,
       type: "sqlite",
     },
+    user: {
+      additionalFields: {
+        role: {
+          type: "string",
+          defaultValue: "user",
+          input: false,
+        },
+        // Collected on the email/password sign-up form and persisted to the
+        // user row. All optional at the schema level so the Google OAuth
+        // sign-up path (which doesn't supply them) keeps working; the form
+        // enforces which are required on the client.
+        first_name: { type: "string", required: false, input: true },
+        last_name: { type: "string", required: false, input: true },
+        country: { type: "string", required: false, input: true },
+        city: { type: "string", required: false, input: true },
+      },
+    },
     advanced: {
       defaultCookieAttributes: {
         secure: env.BETTER_AUTH_URL.startsWith("https"),
@@ -70,7 +90,16 @@ export function createAuth(d1: D1Database, env: AuthEnv) {
         trustedProviders: ["google", "facebook"],
       },
     },
-    plugins: [bearer()],
+    emailAndPassword: {
+      enabled: true,
+      requireEmailVerification: false,
+    },
+    plugins: [
+      bearer(),
+      // Adds a unique login handle + POST /api/auth/sign-in/username.
+      // Handles are 3-30 chars, [a-zA-Z0-9_.], stored lowercased.
+      username({ minUsernameLength: 3, maxUsernameLength: 30 }),
+    ],
   });
 }
 

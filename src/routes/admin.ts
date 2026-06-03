@@ -335,3 +335,37 @@ admin.get("/users/:id", async (c) => {
     recent_sessions: recentSessions.results ?? [],
   });
 });
+
+// POST /api/admin/users/:id/promote-auditor
+// Promotes a target user to role = 'auditor', but ONLY if the calling
+// (authenticated) user is themselves an auditor. Non-auditors get 404 so
+// the endpoint's existence isn't revealed to regular users.
+admin.post("/users/:id/promote-auditor", async (c) => {
+  const actor = c.get("user");
+
+  const actorRow = await c.env.DB.prepare(
+    `SELECT role FROM "user" WHERE id = ?`
+  )
+    .bind(actor.id)
+    .first<{ role: string }>();
+  if (actorRow?.role !== "auditor") {
+    return c.json({ error: "Not found" }, 404);
+  }
+
+  const targetId = c.req.param("id")!;
+  const target = await c.env.DB.prepare(
+    `SELECT id, role FROM "user" WHERE id = ?`
+  )
+    .bind(targetId)
+    .first<{ id: string; role: string }>();
+  if (!target) return c.json({ error: "Not found" }, 404);
+  if (target.role === "auditor") return c.json({ ok: true, changed: false });
+
+  await c.env.DB.prepare(
+    `UPDATE "user" SET role = 'auditor', updatedAt = datetime('now') WHERE id = ?`
+  )
+    .bind(targetId)
+    .run();
+
+  return c.json({ ok: true, changed: true });
+});

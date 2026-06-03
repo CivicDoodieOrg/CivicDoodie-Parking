@@ -37,14 +37,32 @@ app.use("/api/*", async (c, next) => {
   const isLocal =
     /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
     origin === "null";
-  if (isLocal) {
-    c.header("Access-Control-Allow-Origin", origin || "*");
-    c.header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
-    c.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-    c.header("Access-Control-Allow-Credentials", "true");
+
+  // Preflight: answer immediately with the CORS headers.
+  if (c.req.method === "OPTIONS") {
+    const headers: Record<string, string> = {};
+    if (isLocal) {
+      headers["Access-Control-Allow-Origin"] = origin || "*";
+      headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS";
+      headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization";
+      headers["Access-Control-Allow-Credentials"] = "true";
+    }
+    return new Response(null, { status: 204, headers });
   }
-  if (c.req.method === "OPTIONS") return c.body(null, 204);
+
   await next();
+
+  // Apply CORS headers to the ACTUAL response. Setting them via c.header()
+  // before next() is lost when a handler returns its own Response object
+  // (the better-auth handler does this), so we attach them to the final
+  // response here. Credentialed cross-origin requests require these headers
+  // on the real response, not just the preflight.
+  if (isLocal) {
+    c.res.headers.set("Access-Control-Allow-Origin", origin || "*");
+    c.res.headers.set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
+    c.res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    c.res.headers.set("Access-Control-Allow-Credentials", "true");
+  }
 });
 
 // Rate limiting on all /api/* routes — applied before any route logic.

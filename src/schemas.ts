@@ -290,6 +290,7 @@ export const ProfileUser = z
     brownie_points: z.number().int(),
     status: UserStatus,
     terms_accepted_at: z.string().nullable(),
+    role: z.enum(["user", "auditor"]),
     created_at: z.string().nullable(),
     profile_complete: z.boolean(),
     accounts: z.array(LinkedAccount),

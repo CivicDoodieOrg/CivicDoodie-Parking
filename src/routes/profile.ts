@@ -28,7 +28,7 @@ profile.get("/", requireAuth, async (c) => {
 
   const row = await c.env.DB.prepare(
     `SELECT screen_name, city, state_or_region, country, brownie_points,
-            status, terms_accepted_at, createdAt
+            status, terms_accepted_at, role, createdAt
      FROM "user" WHERE id = ?`
   )
     .bind(user.id)
@@ -40,6 +40,7 @@ profile.get("/", requireAuth, async (c) => {
       brownie_points: number;
       status: string;
       terms_accepted_at: string | null;
+      role: "user" | "auditor";
       createdAt: string;
     }>();
 
@@ -76,6 +77,7 @@ profile.get("/", requireAuth, async (c) => {
       brownie_points: row?.brownie_points ?? 0,
       status: row?.status ?? "active",
       terms_accepted_at: row?.terms_accepted_at ?? null,
+      role: (row?.role ?? "user") as "user" | "auditor",
       created_at: row?.createdAt ?? null,
       profile_complete: Boolean(row?.screen_name && row?.country && row?.terms_accepted_at),
       accounts,
