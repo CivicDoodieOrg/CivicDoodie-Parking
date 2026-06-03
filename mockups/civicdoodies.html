@@ -43,10 +43,13 @@
   .nav-link:hover { background:var(--line); color:var(--ink); }
   .nav-link.cta { background:var(--signal); color:#fff; }
   .nav-link.cta:hover { background:var(--signal-dark); }
+  .auditor-badge { display:inline-block; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; padding:3px 8px; border-radius:100px; background:var(--signal); color:#fff; margin-right:4px; }
+  .nav-user { font-size:14px; font-weight:500; color:var(--ink); padding:8px 4px; }
+  .signin-remember { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-soft); margin-bottom:16px; }
 
   /* sign-in modal */
   .signin-backdrop { position:fixed; inset:0; z-index:200; background:rgba(26,23,20,0.45); display:flex; align-items:center; justify-content:center; padding:20px; }
-  .signin-card { background:var(--paper-card); border:1px solid var(--line); border-radius:var(--radius-lg); padding:28px 28px 24px; width:100%; max-width:380px; position:relative; }
+  .signin-card { background:var(--paper-card); border:1px solid var(--line); border-radius:var(--radius-lg); padding:28px 28px 24px; width:100%; max-width:400px; max-height:90vh; overflow-y:auto; position:relative; }
   .signin-close { position:absolute; top:14px; right:14px; background:none; border:none; font-size:20px; color:var(--ink-faint); line-height:1; padding:4px 8px; border-radius:6px; }
   .signin-close:hover { background:var(--line); color:var(--ink); }
   .signin-title { font-family:var(--font-display); font-size:1.35rem; font-weight:500; margin-bottom:20px; }
@@ -54,6 +57,17 @@
   .signin-toggle a { color:var(--signal-dark); text-decoration:none; font-weight:500; cursor:pointer; }
   .signin-toggle a:hover { text-decoration:underline; }
   .signin-error { font-size:13px; color:var(--signal-dark); background:var(--signal-wash); border-radius:7px; padding:8px 12px; margin-bottom:14px; display:none; }
+  .signin-name-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .role-picker { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; }
+  .role-picker input[type=radio] { position:absolute; opacity:0; width:0; height:0; }
+  .role-option { display:flex; flex-direction:column; gap:3px; border:1.5px solid var(--line-strong); border-radius:9px; padding:12px 14px; cursor:pointer; transition:border-color .15s, background .15s; }
+  .role-option:hover { background:var(--line); }
+  .role-picker input[type=radio]:checked + .role-option { border-color:var(--signal); background:var(--signal-wash); }
+  .role-option-title { font-size:14px; font-weight:500; color:var(--ink); }
+  .role-option-desc { font-size:12px; color:var(--ink-soft); line-height:1.4; }
+  .auditor-warning { background:#fef9e7; border:1.5px solid #e6c84a; border-radius:8px; padding:10px 13px; font-size:13px; color:#7a5c00; line-height:1.5; margin-bottom:16px; display:none; }
+  .auditor-warning strong { display:block; margin-bottom:2px; color:#5a4200; }
+  .email-hint { font-size:12px; color:var(--ink-soft); margin-top:-10px; margin-bottom:16px; display:none; }
 
   .page { max-width:920px; margin:0 auto; padding:28px 22px 90px; }
   .screen { display:none; }
@@ -71,6 +85,9 @@
   .card { background:var(--paper-card); border:1px solid var(--line); border-radius:var(--radius-lg); padding:18px 20px; }
 
   .field-label { display:block; font-size:13px; font-weight:500; color:var(--ink-soft); margin-bottom:5px; }
+  .pw-label-row { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px; }
+  .pw-toggle { background:none; border:none; color:var(--signal-dark); font-size:12px; font-weight:500; cursor:pointer; padding:0; }
+  .pw-toggle:hover { text-decoration:underline; }
   .field-input,.field-select { width:100%; padding:11px 13px; border:1px solid var(--line-strong); border-radius:8px; background:var(--paper-card); color:var(--ink); margin-bottom:16px; }
   .field-input:focus,.field-select:focus { outline:none; border-color:var(--signal); box-shadow:0 0 0 3px var(--signal-wash); }
   .zone-field { text-align:center; font-family:var(--font-mono); font-size:1.8rem; font-weight:500; letter-spacing:.08em; }
@@ -253,7 +270,7 @@
     <nav>
       <button class="nav-link" onclick="go('map')">Mismatch map</button>
       <button class="nav-link" onclick="go('audit')">Auditor</button>
-      <button class="nav-link" onclick="openSignIn()">Sign in</button>
+      <span id="nav-auth"></span>
       <button class="nav-link cta" onclick="startCheck()">Report or check a zone</button>
     </nav>
   </div>
@@ -265,14 +282,67 @@
     <button class="signin-close" onclick="closeSignIn()" aria-label="Close">&times;</button>
     <h2 class="signin-title" id="signin-title">Sign in</h2>
     <div class="signin-error" id="signin-error"></div>
-    <label class="field-label" for="signin-email">Email</label>
+
+    <!-- create-account-only fields -->
+    <div id="signin-create-fields" style="display:none;">
+      <label class="field-label" style="margin-bottom:8px;">I am a</label>
+      <div class="role-picker">
+        <label>
+          <input type="radio" name="signin-role" value="user" checked onchange="onRoleChange()" />
+          <span class="role-option">
+            <span class="role-option-title">Regular user</span>
+            <span class="role-option-desc">Submit and track parking mismatch reports</span>
+          </span>
+        </label>
+        <label>
+          <input type="radio" name="signin-role" value="auditor" onchange="onRoleChange()" />
+          <span class="role-option">
+            <span class="role-option-title">Auditor</span>
+            <span class="role-option-desc">Municipality staff reviewing and resolving reports</span>
+          </span>
+        </label>
+      </div>
+      <div class="auditor-warning" id="auditor-warning">
+        <strong>Government municipalities only</strong>
+        Auditor accounts are reserved for verified government and municipal staff.
+        Additional authentication will be required before your account is approved.
+      </div>
+      <div class="signin-name-row">
+        <div>
+          <label class="field-label" for="signin-first">First name <span style="color:var(--signal-dark);">*</span></label>
+          <input id="signin-first" class="field-input" type="text" placeholder="First" autocomplete="given-name" />
+        </div>
+        <div>
+          <label class="field-label" for="signin-last">Last name <span style="color:var(--signal-dark);">*</span></label>
+          <input id="signin-last" class="field-input" type="text" placeholder="Last" autocomplete="family-name" />
+        </div>
+      </div>
+      <label class="field-label" for="signin-username">Username <span style="color:var(--signal-dark);">*</span></label>
+      <input id="signin-username" class="field-input" type="text" placeholder="e.g. sam_r" autocomplete="username" />
+      <p style="font-size:12px; color:var(--ink-soft); margin-top:-10px; margin-bottom:16px;">3-30 characters: letters, numbers, underscore or period. This is your public name and how you sign in (along with your email).</p>
+      <label class="field-label" for="signin-country">Country <span style="color:var(--signal-dark);">*</span></label>
+      <input id="signin-country" class="field-input" type="text" placeholder="e.g. United States" autocomplete="country-name" />
+      <label class="field-label" for="signin-city">City</label>
+      <input id="signin-city" class="field-input" type="text" placeholder="e.g. Greenwich" autocomplete="address-level2" />
+    </div>
+
+    <!-- shared fields -->
+    <label class="field-label" for="signin-email" id="signin-email-label">Email</label>
     <input id="signin-email" class="field-input" type="email" placeholder="you@example.com" autocomplete="email" />
-    <label class="field-label" for="signin-password">Password</label>
+    <p class="email-hint" id="email-hint">Use your official government or municipal email address (e.g. name@greenwich.gov)</p>
+    <div class="pw-label-row">
+      <label class="field-label" for="signin-password" style="margin-bottom:0;">Password <span style="color:var(--signal-dark);">*</span></label>
+      <button type="button" class="pw-toggle" id="pw-toggle" onclick="togglePasswordVisibility()">Show</button>
+    </div>
     <input id="signin-password" class="field-input" type="password" placeholder="Password" autocomplete="current-password" />
+    <label class="signin-remember" id="signin-remember-wrap">
+      <input type="checkbox" id="signin-remember" checked /> Keep me signed in
+    </label>
     <div id="signin-confirm-wrap" style="display:none;">
-      <label class="field-label" for="signin-confirm">Confirm password</label>
+      <label class="field-label" for="signin-confirm">Confirm password <span style="color:var(--signal-dark);">*</span></label>
       <input id="signin-confirm" class="field-input" type="password" placeholder="Confirm password" autocomplete="new-password" />
     </div>
+
     <button class="btn btn-primary btn-block" id="signin-submit" onclick="submitSignIn()">Sign in</button>
     <p class="signin-toggle" id="signin-toggle">
       Don&rsquo;t have an account? <a onclick="setSignInMode('create')">Create one</a>
@@ -565,6 +635,24 @@ function apiFetch(path, opts) {
     });
 }
 
+// better-auth HTTP wrapper. POSTs JSON to /api/auth/<path>, sends the session
+// cookie, and surfaces better-auth's { message } error shape on failure.
+function authRequest(path, body){
+  return fetch(API_BASE + '/api/auth' + path, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }).then(function(r){
+    return r.json().catch(function(){ return {}; }).then(function(data){
+      if(!r.ok){
+        throw new Error((data && (data.message || data.error)) || ('HTTP ' + r.status));
+      }
+      return data;
+    });
+  });
+}
+
 /* ---------- fake data ---------- */
 var CITIES = [
   { name:'New York, NY', city:'New York', state:'New York', country:'United States', lat:40.7411, lng:-73.9897 },
@@ -627,8 +715,8 @@ CITIES.forEach(function(c){
 /* ---------- sign-in modal ---------- */
 var signinMode = 'signin'; // 'signin' | 'create'
 
-function openSignIn(){
-  signinMode = 'signin';
+function openSignIn(mode){
+  signinMode = mode || 'signin';
   applySignInMode();
   clearSignInFields();
   document.getElementById('signin-modal').style.display = 'flex';
@@ -654,18 +742,65 @@ function applySignInMode(){
   var isCreate = signinMode === 'create';
   document.getElementById('signin-title').textContent = isCreate ? 'Create account' : 'Sign in';
   document.getElementById('signin-submit').textContent = isCreate ? 'Create account' : 'Sign in';
+  document.getElementById('signin-create-fields').style.display = isCreate ? 'block' : 'none';
   document.getElementById('signin-confirm-wrap').style.display = isCreate ? 'block' : 'none';
+  document.getElementById('signin-remember-wrap').style.display = isCreate ? 'none' : 'flex';
   document.getElementById('signin-toggle').innerHTML = isCreate
     ? 'Already have an account? <a onclick="setSignInMode(\'signin\')">Sign in</a>'
-    : "Don’t have an account? <a onclick=\"setSignInMode(‘create’)\">Create one</a>";
+    : "Don't have an account? <a onclick=\"setSignInMode('create')\">Create one</a>";
   document.getElementById('signin-password').setAttribute('autocomplete', isCreate ? 'new-password' : 'current-password');
+  // The shared identifier field is an email at sign-up, but accepts email OR
+  // username at sign-in.
+  var emailLabel = document.getElementById('signin-email-label');
+  var emailField = document.getElementById('signin-email');
+  if(isCreate){
+    emailLabel.innerHTML = 'Email <span style="color:var(--signal-dark);">*</span>';
+    emailField.type = 'email';
+    emailField.placeholder = 'you@example.com';
+  } else {
+    emailLabel.textContent = 'Email or username';
+    emailField.type = 'text';
+    emailField.placeholder = 'you@example.com or your username';
+  }
+}
+
+function onRoleChange(){
+  var isAuditor = document.querySelector('input[name=signin-role]:checked').value === 'auditor';
+  document.getElementById('auditor-warning').style.display = isAuditor ? 'block' : 'none';
+  var emailHint = document.getElementById('email-hint');
+  var emailInput = document.getElementById('signin-email');
+  emailHint.style.display = isAuditor ? 'block' : 'none';
+  // Only steer the email placeholder in create mode; sign-in mode uses the
+  // "email or username" placeholder set by applySignInMode().
+  if(signinMode === 'create'){
+    emailInput.placeholder = isAuditor ? 'name@yourcity.gov' : 'you@example.com';
+  }
 }
 
 function clearSignInFields(){
-  document.getElementById('signin-email').value = '';
-  document.getElementById('signin-password').value = '';
-  document.getElementById('signin-confirm').value = '';
+  ['signin-first','signin-last','signin-username','signin-country','signin-city',
+   'signin-email','signin-password','signin-confirm'].forEach(function(id){
+    document.getElementById(id).value = '';
+  });
+  var defaultRole = document.querySelector('input[name=signin-role][value=user]');
+  if(defaultRole) defaultRole.checked = true;
+  // Reset password fields to hidden each time the modal is cleared/reopened.
+  document.getElementById('signin-password').type = 'password';
+  document.getElementById('signin-confirm').type = 'password';
+  document.getElementById('pw-toggle').textContent = 'Show';
+  onRoleChange();
   clearSignInError();
+}
+
+// Reveal/hide the password (and the confirm field, in create mode) together.
+function togglePasswordVisibility(){
+  var pw = document.getElementById('signin-password');
+  var confirmPw = document.getElementById('signin-confirm');
+  var btn = document.getElementById('pw-toggle');
+  var reveal = pw.type === 'password';
+  pw.type = reveal ? 'text' : 'password';
+  if(confirmPw) confirmPw.type = reveal ? 'text' : 'password';
+  btn.textContent = reveal ? 'Hide' : 'Show';
 }
 
 function clearSignInError(){ showSignInError(''); }
@@ -677,23 +812,122 @@ function showSignInError(msg){
 }
 
 function submitSignIn(){
-  var email = document.getElementById('signin-email').value.trim();
+  var identifier = document.getElementById('signin-email').value.trim();
   var password = document.getElementById('signin-password').value;
-  if(!email || !password){ showSignInError('Email and password are required.'); return; }
-  if(signinMode === 'create'){
-    var confirm = document.getElementById('signin-confirm').value;
-    if(password !== confirm){ showSignInError("Passwords don’t match."); return; }
+  if(!identifier || !password){
+    showSignInError('Enter your ' + (signinMode === 'create' ? 'email' : 'email or username') + ' and password.');
+    return;
   }
-  // Mockup only — no real auth call.
+
+  var path, payload;
+  if(signinMode === 'create'){
+    var first = document.getElementById('signin-first').value.trim();
+    if(!first){ showSignInError('First name is required.'); return; }
+    var last = document.getElementById('signin-last').value.trim();
+    if(!last){ showSignInError('Last name is required.'); return; }
+    var country = document.getElementById('signin-country').value.trim();
+    if(!country){ showSignInError('Country is required.'); return; }
+    var city = document.getElementById('signin-city').value.trim(); // optional
+    var uname = document.getElementById('signin-username').value.trim();
+    if(!uname){ showSignInError('Username is required.'); return; }
+    if(!/^[a-zA-Z0-9_.]{3,30}$/.test(uname)){
+      showSignInError('Username must be 3-30 characters: letters, numbers, underscore or period.');
+      return;
+    }
+    var confirmPw = document.getElementById('signin-confirm').value;
+    if(password !== confirmPw){ showSignInError("Passwords don't match."); return; }
+    // Username doubles as the public display name. first/last/country are
+    // required by the form; city is optional and only sent when filled.
+    path = '/sign-up/email';
+    payload = { name: uname, email: identifier, password: password, username: uname,
+                first_name: first, last_name: last, country: country, callbackURL: '/' };
+    if(city) payload.city = city;
+  } else {
+    var remember = document.getElementById('signin-remember').checked;
+    // The identifier is an email if it contains "@", otherwise a username.
+    if(identifier.indexOf('@') >= 0){
+      path = '/sign-in/email';
+      payload = { email: identifier, password: password, rememberMe: remember, callbackURL: '/' };
+    } else {
+      path = '/sign-in/username';
+      payload = { username: identifier, password: password, rememberMe: remember, callbackURL: '/' };
+    }
+  }
+
   showSignInError('');
-  document.getElementById('signin-submit').disabled = true;
-  document.getElementById('signin-submit').textContent = signinMode === 'create' ? 'Creating…' : 'Signing in…';
-  setTimeout(function(){
-    document.getElementById('signin-submit').disabled = false;
-    applySignInMode();
-    closeSignIn();
-    alert((signinMode === 'create' ? 'Account created' : 'Signed in') + ' as ' + email + ' (mockup — no real auth).');
-  }, 800);
+  var btn = document.getElementById('signin-submit');
+  btn.disabled = true;
+  btn.textContent = signinMode === 'create' ? 'Creating...' : 'Signing in...';
+
+  authRequest(path, payload)
+    .then(function(){ return refreshAuth(); })
+    .then(function(){
+      btn.disabled = false;
+      applySignInMode();
+      closeSignIn();
+    })
+    .catch(function(err){
+      btn.disabled = false;
+      applySignInMode();
+      showSignInError(err.message || 'Something went wrong.');
+    });
+}
+
+/* ---------- auth state ---------- */
+var currentUser = null; // { name, role } when signed in, otherwise null
+
+function escapeHtml(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// Render the auth slot in the header from currentUser.
+function updateAuthUI(){
+  var el = document.getElementById('nav-auth');
+  if(!el) return;
+  if(currentUser){
+    var badge = currentUser.role === 'auditor'
+      ? '<span class="auditor-badge">Auditor</span>'
+      : '';
+    el.innerHTML =
+      badge +
+      '<span class="nav-user">' + escapeHtml(currentUser.name || 'Account') + '</span>' +
+      '<button class="nav-link" onclick="signOut()">Sign out</button>';
+  } else {
+    el.innerHTML =
+      '<button class="nav-link" onclick="openSignIn(\'signin\')">Sign in</button>' +
+      '<button class="nav-link" onclick="openSignIn(\'create\')">Create account</button>';
+  }
+}
+
+// Read the current better-auth session and store name + role in currentUser.
+// Called on load and after a successful sign-in/sign-up/sign-out.
+function refreshAuth(){
+  return fetch(API_BASE + '/api/auth/get-session', { credentials: 'include' })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(data){
+      currentUser = (data && data.user)
+        ? { name: data.user.name, role: data.user.role || 'user' }
+        : null;
+      updateAuthUI();
+      // If the auditor table is on screen, re-render so the Edit column
+      // appears/disappears for the new role.
+      if(document.getElementById('screen-audit').classList.contains('active')){
+        renderAuditTable();
+      }
+    })
+    .catch(function(){ currentUser = null; updateAuthUI(); });
+}
+
+function signOut(){
+  fetch(API_BASE + '/api/auth/sign-out', { method: 'POST', credentials: 'include' })
+    .catch(function(){ /* ignore network error -- clear local state regardless */ })
+    .then(function(){
+      currentUser = null;
+      updateAuthUI();
+      go('landing');
+    });
 }
 
 /* ---------- navigation ---------- */
@@ -1639,9 +1873,14 @@ function renderAuditTable(){
       tbody.innerHTML='<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--ink-faint);">No zones match.</td></tr>';
       return;
     }
+    var canEdit = !!(currentUser && currentUser.role === 'auditor');
     tbody.innerHTML = rows.map(function(z){
       var s = statusById(z.fix_state);
-      return '<tr onclick="openAuditEditor(\''+z.slug+'\',\''+z.town_slug+'\')">' +
+      var rowOpen = canEdit
+        ? ' onclick="openAuditEditor(\''+z.slug+'\',\''+z.town_slug+'\')" style="cursor:pointer;"'
+        : '';
+      var editCell = canEdit ? '<td class="actions-cell">Edit →</td>' : '<td class="actions-cell"></td>';
+      return '<tr'+rowOpen+'>' +
         '<td class="id-cell" style="font-size:12px;">'+z.slug+'</td>'+
         '<td class="zone-cell">'+z.type+'</td>'+
         '<td>'+(z.town_name||z.town_slug)+'</td>'+
@@ -1649,7 +1888,7 @@ function renderAuditTable(){
         '<td><span class="status-badge '+s.tone+'">'+s.label+'</span></td>'+
         '<td>—</td>'+
         '<td>—</td>'+
-        '<td class="actions-cell">Edit →</td>'+
+        editCell+
       '</tr>';
     }).join('');
   }).catch(function(){
@@ -1734,6 +1973,7 @@ function openZone(slug, townSlug){
 }
 
 renderStats();
+refreshAuth();
 </script>
 </body>
 </html>
