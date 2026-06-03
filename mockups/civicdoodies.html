@@ -241,6 +241,19 @@
   .tos-banner { position:fixed; left:0; right:0; bottom:0; z-index:45; background:var(--ink); color:var(--paper); padding:12px 22px; display:flex; align-items:center; justify-content:center; gap:16px; flex-wrap:wrap; font-size:13px; }
   .tos-banner button { background:var(--paper); color:var(--ink); border:none; border-radius:6px; padding:6px 14px; font-size:13px; font-weight:500; }
   .tos-banner a { color:#f0b5a8; cursor:pointer; }
+
+  /* OAuth sign-in buttons */
+  .btn-oauth { justify-content:center; gap:10px; font-size:14px; font-weight:500; margin-bottom:10px; }
+  .btn-google { background:#fff; border:1px solid #dadce0; color:#3c4043; }
+  .btn-google:hover { background:#f8f9fa; border-color:#c6c6c6; }
+  .btn-facebook { background:#1877f2; border:1px solid #1877f2; color:#fff; }
+  .btn-facebook:hover { background:#166fe5; border-color:#166fe5; }
+
+  /* Signed-in user chip in topbar */
+  .nav-user { font-size:13px; font-weight:500; color:var(--ink); padding:6px 10px; border-radius:7px; background:var(--paper-card); border:1px solid var(--line); }
+  .nav-role-badge { display:inline-block; font-size:11px; font-weight:500; padding:2px 7px; border-radius:100px; margin-left:4px; vertical-align:middle; }
+  .nav-role-badge.auditor { background:#d6e4f4; color:#1d3f6e; }
+  .nav-role-badge.admin { background:var(--signal-wash); color:var(--signal-dark); }
 </style>
 </head>
 <body>
@@ -250,7 +263,7 @@
     <div class="brand" onclick="go('landing')">
       <span class="mark">CD</span><span class="name">CivicDoodies</span>
     </div>
-    <nav>
+    <nav id="topbar-nav">
       <button class="nav-link" onclick="go('map')">Mismatch map</button>
       <button class="nav-link" onclick="go('audit')">Auditor</button>
       <button class="nav-link" onclick="openSignIn()">Sign in</button>
@@ -259,24 +272,119 @@
   </div>
 </header>
 
-<!-- sign-in / create account modal -->
+<!-- sign-in modal (OAuth only) -->
 <div id="signin-modal" class="signin-backdrop" style="display:none;" onclick="onSignInBackdropClick(event)">
   <div class="signin-card">
     <button class="signin-close" onclick="closeSignIn()" aria-label="Close">&times;</button>
-    <h2 class="signin-title" id="signin-title">Sign in</h2>
+    <h2 class="signin-title">Sign in to CivicDoodies</h2>
     <div class="signin-error" id="signin-error"></div>
-    <label class="field-label" for="signin-email">Email</label>
-    <input id="signin-email" class="field-input" type="email" placeholder="you@example.com" autocomplete="email" />
-    <label class="field-label" for="signin-password">Password</label>
-    <input id="signin-password" class="field-input" type="password" placeholder="Password" autocomplete="current-password" />
-    <div id="signin-confirm-wrap" style="display:none;">
-      <label class="field-label" for="signin-confirm">Confirm password</label>
-      <input id="signin-confirm" class="field-input" type="password" placeholder="Confirm password" autocomplete="new-password" />
-    </div>
-    <button class="btn btn-primary btn-block" id="signin-submit" onclick="submitSignIn()">Sign in</button>
-    <p class="signin-toggle" id="signin-toggle">
-      Don&rsquo;t have an account? <a onclick="setSignInMode('create')">Create one</a>
+    <button class="btn btn-oauth btn-google btn-block" onclick="signInWith('google')">
+      <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">
+        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+      </svg>
+      Continue with Google
+    </button>
+    <button class="btn btn-oauth btn-facebook btn-block" onclick="signInWith('facebook')">
+      <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">
+        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" fill="white"/>
+      </svg>
+      Continue with Facebook
+    </button>
+    <p class="faint" style="text-align:center; margin-top:16px; font-size:12px;">
+      By signing in you agree to our <a onclick="go('privacy');closeSignIn();" style="color:var(--signal-dark);cursor:pointer;">Privacy Policy</a>.
     </p>
+  </div>
+</div>
+
+<!-- onboarding modal — shown after OAuth redirect when profile is incomplete -->
+<div id="onboarding-modal" class="signin-backdrop" style="display:none;">
+  <div class="signin-card" style="max-width:460px;">
+    <h2 class="signin-title">Welcome! Set up your account</h2>
+    <p class="faint" style="margin-bottom:20px; font-size:13px;">This takes 30 seconds. Your screen name is <strong>permanent</strong> &mdash; choose carefully.</p>
+
+    <label class="field-label" for="ob-name">Screen name</label>
+    <div style="display:flex; gap:8px; margin-bottom:4px;">
+      <input id="ob-name" class="field-input" type="text" maxlength="30"
+        placeholder="letters, digits, hyphens"
+        oninput="onObNameInput()"
+        style="margin-bottom:0; font-family:var(--font-mono);" />
+      <button class="btn" onclick="suggestObName()" id="ob-suggest" style="white-space:nowrap;">Try another</button>
+    </div>
+    <p id="ob-name-status" class="faint" style="margin-bottom:16px; min-height:1.2em;">&nbsp;</p>
+
+    <label class="field-label" for="ob-country">Country</label>
+    <select id="ob-country" class="field-select" onchange="updateObBtn()">
+      <option value="">Select your country&hellip;</option>
+      <option value="US">United States</option>
+      <option value="CA">Canada</option>
+      <option value="GB">United Kingdom</option>
+      <option value="AU">Australia</option>
+      <option value="NZ">New Zealand</option>
+      <option value="IE">Ireland</option>
+      <option value="DE">Germany</option>
+      <option value="FR">France</option>
+      <option value="ES">Spain</option>
+      <option value="IT">Italy</option>
+      <option value="NL">Netherlands</option>
+      <option value="BE">Belgium</option>
+      <option value="SE">Sweden</option>
+      <option value="NO">Norway</option>
+      <option value="DK">Denmark</option>
+      <option value="FI">Finland</option>
+      <option value="CH">Switzerland</option>
+      <option value="AT">Austria</option>
+      <option value="PT">Portugal</option>
+      <option value="PL">Poland</option>
+      <option value="CZ">Czech Republic</option>
+      <option value="HU">Hungary</option>
+      <option value="RO">Romania</option>
+      <option value="GR">Greece</option>
+      <option value="JP">Japan</option>
+      <option value="KR">South Korea</option>
+      <option value="CN">China</option>
+      <option value="IN">India</option>
+      <option value="SG">Singapore</option>
+      <option value="HK">Hong Kong</option>
+      <option value="MY">Malaysia</option>
+      <option value="TW">Taiwan</option>
+      <option value="BR">Brazil</option>
+      <option value="MX">Mexico</option>
+      <option value="AR">Argentina</option>
+      <option value="CO">Colombia</option>
+      <option value="ZA">South Africa</option>
+      <option value="NG">Nigeria</option>
+      <option value="KE">Kenya</option>
+      <option value="IL">Israel</option>
+      <option value="AE">United Arab Emirates</option>
+    </select>
+
+    <div style="margin-bottom:10px;">
+      <label class="field-label" style="margin-bottom:8px;">Account type</label>
+      <label style="display:flex; align-items:center; gap:10px; margin-bottom:8px; cursor:pointer; font-size:14px;">
+        <input type="radio" name="ob-role" value="user" checked onchange="updateObBtn()" />
+        <span><strong>Resident / Reporter</strong> &mdash; report and track parking issues</span>
+      </label>
+      <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-size:14px;">
+        <input type="radio" name="ob-role" value="auditor" onchange="updateObBtn()" />
+        <span><strong>City Staff / Auditor</strong> &mdash; can update issue status in the auditor view</span>
+      </label>
+    </div>
+
+    <label style="display:flex; align-items:flex-start; gap:10px; margin-bottom:18px; cursor:pointer;">
+      <input type="checkbox" id="ob-tos" onchange="updateObBtn()" style="margin-top:3px;" />
+      <span class="faint" style="font-size:13px;">I accept the <a onclick="go('privacy');" style="color:var(--signal-dark);cursor:pointer;">Privacy Policy</a> and Terms of Service.</span>
+    </label>
+
+    <div class="signin-error" id="ob-error"></div>
+    <button class="btn btn-primary btn-block" id="ob-submit" onclick="submitOnboarding()" disabled>
+      Let&rsquo;s go &rarr;
+    </button>
+    <button class="btn btn-block" onclick="doSignOut()" style="margin-top:8px; color:var(--ink-soft);">
+      Sign out instead
+    </button>
   </div>
 </div>
 
@@ -501,7 +609,7 @@
     </div>
 
     <p class="faint" style="margin-top:14px;">
-      This page would be access-controlled in a real deployment &mdash; only authenticated city staff or moderators should edit status. In this mockup, changes are kept in memory only.
+      Only users with <strong>Auditor</strong> or <strong>Admin</strong> role can update issue status. Status changes are saved to the live backend. Sign in and choose &ldquo;City Staff / Auditor&rdquo; during account setup to gain edit access.
     </p>
   </div>
 </section>
@@ -624,76 +732,208 @@ CITIES.forEach(function(c){
   }
 });
 
+/* ---------- auth state ---------- */
+var authUser = null;    // better-auth user object, or null when anonymous
+var authProfile = null; // /api/profile response, or null
+
+function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function updateAuthNav(){
+  var nav = document.getElementById('topbar-nav');
+  if(!nav) return;
+  if(authUser){
+    var displayName = (authProfile && authProfile.screen_name) ? authProfile.screen_name : authUser.name;
+    var role = authProfile ? authProfile.role : 'user';
+    var badgeHtml = (role === 'auditor' || role === 'admin')
+      ? '<span class="nav-role-badge '+role+'">'+role+'</span>' : '';
+    nav.innerHTML =
+      '<button class="nav-link" onclick="go(\'map\')">Mismatch map</button>'+
+      '<button class="nav-link" onclick="go(\'audit\')">Auditor</button>'+
+      '<span class="nav-user">'+escHtml(displayName)+badgeHtml+'</span>'+
+      '<button class="nav-link" onclick="doSignOut()">Sign out</button>'+
+      '<button class="nav-link cta" onclick="startCheck()">Report or check a zone</button>';
+  } else {
+    nav.innerHTML =
+      '<button class="nav-link" onclick="go(\'map\')">Mismatch map</button>'+
+      '<button class="nav-link" onclick="go(\'audit\')">Auditor</button>'+
+      '<button class="nav-link" onclick="openSignIn()">Sign in</button>'+
+      '<button class="nav-link cta" onclick="startCheck()">Report or check a zone</button>';
+  }
+}
+
+function checkSession(){
+  return fetch(API_BASE + '/api/auth/get-session', { credentials:'include' })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(data){
+      authUser = (data && data.user) ? data.user : null;
+      updateAuthNav();
+      if(authUser) return fetchProfile();
+    })
+    .catch(function(){ authUser = null; updateAuthNav(); });
+}
+
+function fetchProfile(){
+  return apiFetch('/api/profile')
+    .then(function(data){
+      authProfile = data.user;
+      updateAuthNav();
+      if(!data.user.profile_complete) showOnboarding();
+    })
+    .catch(function(){});
+}
+
 /* ---------- sign-in modal ---------- */
-var signinMode = 'signin'; // 'signin' | 'create'
 
 function openSignIn(){
-  signinMode = 'signin';
-  applySignInMode();
-  clearSignInFields();
+  clearSignInError();
   document.getElementById('signin-modal').style.display = 'flex';
-  setTimeout(function(){ document.getElementById('signin-email').focus(); }, 60);
 }
 
 function closeSignIn(){
   document.getElementById('signin-modal').style.display = 'none';
-  clearSignInFields();
+  clearSignInError();
 }
 
 function onSignInBackdropClick(e){
   if(e.target === document.getElementById('signin-modal')) closeSignIn();
 }
 
-function setSignInMode(mode){
-  signinMode = mode;
-  applySignInMode();
-  clearSignInError();
-}
-
-function applySignInMode(){
-  var isCreate = signinMode === 'create';
-  document.getElementById('signin-title').textContent = isCreate ? 'Create account' : 'Sign in';
-  document.getElementById('signin-submit').textContent = isCreate ? 'Create account' : 'Sign in';
-  document.getElementById('signin-confirm-wrap').style.display = isCreate ? 'block' : 'none';
-  document.getElementById('signin-toggle').innerHTML = isCreate
-    ? 'Already have an account? <a onclick="setSignInMode(\'signin\')">Sign in</a>'
-    : "Don’t have an account? <a onclick=\"setSignInMode(‘create’)\">Create one</a>";
-  document.getElementById('signin-password').setAttribute('autocomplete', isCreate ? 'new-password' : 'current-password');
-}
-
-function clearSignInFields(){
-  document.getElementById('signin-email').value = '';
-  document.getElementById('signin-password').value = '';
-  document.getElementById('signin-confirm').value = '';
-  clearSignInError();
-}
-
-function clearSignInError(){ showSignInError(''); }
-
 function showSignInError(msg){
   var el = document.getElementById('signin-error');
   el.textContent = msg;
   el.style.display = msg ? 'block' : 'none';
 }
+function clearSignInError(){ showSignInError(''); }
 
-function submitSignIn(){
-  var email = document.getElementById('signin-email').value.trim();
-  var password = document.getElementById('signin-password').value;
-  if(!email || !password){ showSignInError('Email and password are required.'); return; }
-  if(signinMode === 'create'){
-    var confirm = document.getElementById('signin-confirm').value;
-    if(password !== confirm){ showSignInError("Passwords don’t match."); return; }
-  }
-  // Mockup only — no real auth call.
-  showSignInError('');
-  document.getElementById('signin-submit').disabled = true;
-  document.getElementById('signin-submit').textContent = signinMode === 'create' ? 'Creating…' : 'Signing in…';
-  setTimeout(function(){
-    document.getElementById('signin-submit').disabled = false;
-    applySignInMode();
-    closeSignIn();
-    alert((signinMode === 'create' ? 'Account created' : 'Signed in') + ' as ' + email + ' (mockup — no real auth).');
-  }, 800);
+function signInWith(provider){
+  clearSignInError();
+  var callbackURL = window.location.href;
+  fetch(API_BASE + '/api/auth/sign-in/social', {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ provider:provider, callbackURL:callbackURL })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if(data.url){ window.location.href = data.url; }
+    else showSignInError('Sign-in unavailable. Check that OAuth credentials are configured in .dev.vars.');
+  })
+  .catch(function(err){
+    showSignInError('Network error: '+(err.message||'try again'));
+  });
+}
+
+function doSignOut(){
+  fetch(API_BASE + '/api/auth/sign-out', {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'}, body:'{}'
+  })
+  .finally(function(){
+    authUser = null; authProfile = null; updateAuthNav();
+  });
+}
+
+/* ---------- onboarding modal ---------- */
+var obNameTimer = null;
+var obNameValid = false;
+
+function showOnboarding(){
+  document.getElementById('onboarding-modal').style.display = 'flex';
+  apiFetch('/api/profile/screen-name/suggest')
+    .then(function(d){
+      document.getElementById('ob-name').value = d.suggestion || '';
+      onObNameInput();
+    })
+    .catch(function(){});
+}
+
+function onObNameInput(){
+  obNameValid = false;
+  updateObBtn();
+  var raw = document.getElementById('ob-name').value;
+  // Strip whitespace in place.
+  var clean = raw.replace(/\s+/g,'');
+  if(clean !== raw) document.getElementById('ob-name').value = clean;
+  var name = clean;
+  var status = document.getElementById('ob-name-status');
+  if(!name){ status.textContent = ''; status.style.color = ''; return; }
+  status.textContent = 'Checking…'; status.style.color = 'var(--ink-faint)';
+  clearTimeout(obNameTimer);
+  obNameTimer = setTimeout(function(){
+    fetch(API_BASE + '/api/profile/screen-name/check?name='+encodeURIComponent(name), { credentials:'include' })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(document.getElementById('ob-name').value !== name) return; // stale
+        if(d.available){
+          status.textContent = '✓ Available — this will be your permanent handle.';
+          status.style.color = 'var(--ok)';
+          obNameValid = true;
+        } else {
+          status.textContent = d.message || 'Not available.';
+          status.style.color = 'var(--signal-dark)';
+          obNameValid = false;
+        }
+        updateObBtn();
+      })
+      .catch(function(){ obNameValid = false; updateObBtn(); });
+  }, 300);
+}
+
+function suggestObName(){
+  var btn = document.getElementById('ob-suggest');
+  btn.disabled = true;
+  apiFetch('/api/profile/screen-name/suggest')
+    .then(function(d){
+      document.getElementById('ob-name').value = d.suggestion || '';
+      onObNameInput();
+    })
+    .catch(function(){})
+    .finally(function(){ btn.disabled = false; });
+}
+
+function updateObBtn(){
+  var canSubmit = obNameValid
+    && document.getElementById('ob-country').value
+    && document.getElementById('ob-tos').checked;
+  document.getElementById('ob-submit').disabled = !canSubmit;
+}
+
+function submitOnboarding(){
+  var name = document.getElementById('ob-name').value;
+  var country = document.getElementById('ob-country').value;
+  var roleRadio = document.querySelector('input[name="ob-role"]:checked');
+  var wantsRole = roleRadio ? roleRadio.value : 'user';
+  var btn = document.getElementById('ob-submit');
+  var errEl = document.getElementById('ob-error');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  errEl.style.display = 'none';
+
+  // Sequential: screen name → profile (country + role) → accept ToS
+  apiFetch('/api/profile/screen-name', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ screen_name:name })
+  })
+  .then(function(){
+    var patchBody = { country:country };
+    if(wantsRole === 'auditor') patchBody.role = 'auditor';
+    return apiFetch('/api/profile', {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(patchBody)
+    });
+  })
+  .then(function(){
+    return apiFetch('/api/profile/accept-terms', { method:'POST' });
+  })
+  .then(function(){
+    document.getElementById('onboarding-modal').style.display = 'none';
+    return fetchProfile(); // refresh authProfile with new name + role
+  })
+  .catch(function(err){
+    errEl.textContent = err.message || 'Something went wrong. Try again.';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = "Let's go →";
+  });
 }
 
 /* ---------- navigation ---------- */
@@ -1639,9 +1879,11 @@ function renderAuditTable(){
       tbody.innerHTML='<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--ink-faint);">No zones match.</td></tr>';
       return;
     }
+    var canEdit = authProfile && (authProfile.role === 'auditor' || authProfile.role === 'admin');
     tbody.innerHTML = rows.map(function(z){
       var s = statusById(z.fix_state);
-      return '<tr onclick="openAuditEditor(\''+z.slug+'\',\''+z.town_slug+'\')">' +
+      var rowClick = canEdit ? 'onclick="openAuditEditor(\''+z.slug+'\',\''+z.town_slug+'\')"' : '';
+      return '<tr '+rowClick+' style="'+(canEdit?'':'cursor:default;')+'">' +
         '<td class="id-cell" style="font-size:12px;">'+z.slug+'</td>'+
         '<td class="zone-cell">'+z.type+'</td>'+
         '<td>'+(z.town_name||z.town_slug)+'</td>'+
@@ -1649,7 +1891,7 @@ function renderAuditTable(){
         '<td><span class="status-badge '+s.tone+'">'+s.label+'</span></td>'+
         '<td>—</td>'+
         '<td>—</td>'+
-        '<td class="actions-cell">Edit →</td>'+
+        '<td class="actions-cell">'+(canEdit ? 'Edit →' : '')+'</td>'+
       '</tr>';
     }).join('');
   }).catch(function(){
@@ -1733,7 +1975,9 @@ function openZone(slug, townSlug){
     });
 }
 
-renderStats();
+// Check session first (resolves auth state), then kick off stats.
+// On returning from OAuth redirect, session is already set by better-auth.
+checkSession().then(function(){ renderStats(); });
 </script>
 </body>
 </html>

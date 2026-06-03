@@ -28,7 +28,7 @@ profile.get("/", requireAuth, async (c) => {
 
   const row = await c.env.DB.prepare(
     `SELECT screen_name, city, state_or_region, country, brownie_points,
-            status, terms_accepted_at, createdAt
+            status, role, terms_accepted_at, createdAt
      FROM "user" WHERE id = ?`
   )
     .bind(user.id)
@@ -39,6 +39,7 @@ profile.get("/", requireAuth, async (c) => {
       country: string | null;
       brownie_points: number;
       status: string;
+      role: string;
       terms_accepted_at: string | null;
       createdAt: string;
     }>();
@@ -75,6 +76,7 @@ profile.get("/", requireAuth, async (c) => {
       country: row?.country ?? null,
       brownie_points: row?.brownie_points ?? 0,
       status: row?.status ?? "active",
+      role: row?.role ?? "user",
       terms_accepted_at: row?.terms_accepted_at ?? null,
       created_at: row?.createdAt ?? null,
       profile_complete: Boolean(row?.screen_name && row?.country && row?.terms_accepted_at),
@@ -155,7 +157,9 @@ profile.post("/screen-name", requireAuth, async (c) => {
   return c.json({ ok: true, screen_name: requested });
 });
 
-// PATCH /api/profile — set city / state / country (post-OAuth completion step).
+// PATCH /api/profile — set city / state / country / role (post-OAuth completion step).
+// role:'auditor' is self-service for MVP. Production deployments should gate this
+// behind a verification step before granting audit access.
 // Note: does NOT touch screen_name; that has its own endpoint.
 profile.patch("/", requireAuth, async (c) => {
   const user = c.get("user");
@@ -163,6 +167,7 @@ profile.patch("/", requireAuth, async (c) => {
     city?: string | null;
     state_or_region?: string | null;
     country?: string | null;
+    role?: string | null;
   }>();
 
   const country = body.country?.trim().toUpperCase().slice(0, 2) || null;
@@ -173,11 +178,22 @@ profile.patch("/", requireAuth, async (c) => {
     return c.json({ error: "country must be a 2-letter ISO code" }, 400);
   }
 
-  await c.env.DB.prepare(
-    `UPDATE "user" SET city = ?, state_or_region = ?, country = ?, updatedAt = datetime('now') WHERE id = ?`
-  )
-    .bind(city, state, country, user.id)
-    .run();
+  // Only 'auditor' is self-grantable. 'admin' requires direct DB access.
+  const wantsAuditor = body.role === "auditor";
+
+  const stmts: D1PreparedStatement[] = [
+    c.env.DB.prepare(
+      `UPDATE "user" SET city = ?, state_or_region = ?, country = ?, updatedAt = datetime('now') WHERE id = ?`
+    ).bind(city, state, country, user.id),
+  ];
+  if (wantsAuditor) {
+    stmts.push(
+      c.env.DB.prepare(
+        `UPDATE "user" SET role = 'auditor' WHERE id = ? AND role = 'user'`
+      ).bind(user.id)
+    );
+  }
+  await c.env.DB.batch(stmts);
 
   return c.json({ ok: true });
 });

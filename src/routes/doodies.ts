@@ -564,7 +564,13 @@ doodies.patch("/:doodieSlug", requireAuth, async (c) => {
 
   const admin = isAdmin(user, c.env.ADMIN_USER_IDS);
   const isOwner = user.id === doodie.reporter_id;
-  if (!isOwner && !admin) return c.json({ error: "Not found" }, 404);
+
+  // Auditors and admins can edit fix_state; owners can edit their own description.
+  const roleRow = await c.env.DB.prepare('SELECT role FROM "user" WHERE id = ?')
+    .bind(user.id).first<{ role: string }>();
+  const isAuditor = roleRow?.role === "auditor" || roleRow?.role === "admin";
+
+  if (!isOwner && !admin && !isAuditor) return c.json({ error: "Not found" }, 404);
 
   const body = await c.req
     .json<{
@@ -612,7 +618,7 @@ doodies.patch("/:doodieSlug", requireAuth, async (c) => {
       auditDetails.moderation_status = { from: doodie.moderation_status, to: ms };
     }
   }
-  if (admin && typeof body.fix_state === "string") {
+  if ((admin || isAuditor) && typeof body.fix_state === "string") {
     const fs = body.fix_state;
     if (!["unresolved", "investigating", "resolved_unconfirmed"].includes(fs)) {
       return c.json({ error: "invalid fix_state" }, 400);
@@ -640,7 +646,7 @@ doodies.patch("/:doodieSlug", requireAuth, async (c) => {
       crypto.randomUUID(),
       doodie.id,
       user.id,
-      admin && !isOwner ? "moderated" : "edited",
+      admin && !isOwner ? "moderated" : isAuditor && !isOwner ? "audited" : "edited",
       JSON.stringify(auditDetails),
       ip
     ),

@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "if not exist public mkdir public && wrangler dev",
+    "dev": "node -e \"const fs=require('fs');fs.mkdirSync('public',{recursive:true});fs.copyFileSync('mockups/civicdoodies.html','public/civicdoodies.html');\" && wrangler dev",
     "dev:mockup": "npx serve -p 3001 mockups",
     "preflight": "npm run build:web && npm run typecheck",
     "deploy:prod": "npm run preflight && npm run build:wrangler-deploy && wrangler deploy --config wrangler.deploy.json --env prod",
