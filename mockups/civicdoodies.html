@@ -38,11 +38,22 @@
   .brand { display:flex; align-items:center; gap:9px; cursor:pointer; }
   .brand .mark { width:30px; height:30px; border-radius:7px; background:var(--signal); color:#fff; display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:600; font-size:13px; transform:rotate(-5deg); }
   .brand .name { font-family:var(--font-display); font-weight:600; font-size:19px; }
-  .topbar nav { display:flex; gap:6px; }
+  .topbar nav { display:flex; gap:6px; align-items:center; }
   .nav-link { background:none; border:none; color:var(--ink-soft); font-size:14px; font-weight:500; padding:8px 12px; border-radius:7px; }
   .nav-link:hover { background:var(--line); color:var(--ink); }
   .nav-link.cta { background:var(--signal); color:#fff; }
   .nav-link.cta:hover { background:var(--signal-dark); }
+
+  /* sign-in modal */
+  .signin-backdrop { position:fixed; inset:0; z-index:200; background:rgba(26,23,20,0.45); display:flex; align-items:center; justify-content:center; padding:20px; }
+  .signin-card { background:var(--paper-card); border:1px solid var(--line); border-radius:var(--radius-lg); padding:28px 28px 24px; width:100%; max-width:380px; position:relative; }
+  .signin-close { position:absolute; top:14px; right:14px; background:none; border:none; font-size:20px; color:var(--ink-faint); line-height:1; padding:4px 8px; border-radius:6px; }
+  .signin-close:hover { background:var(--line); color:var(--ink); }
+  .signin-title { font-family:var(--font-display); font-size:1.35rem; font-weight:500; margin-bottom:20px; }
+  .signin-toggle { font-size:13px; color:var(--ink-soft); text-align:center; margin-top:14px; }
+  .signin-toggle a { color:var(--signal-dark); text-decoration:none; font-weight:500; cursor:pointer; }
+  .signin-toggle a:hover { text-decoration:underline; }
+  .signin-error { font-size:13px; color:var(--signal-dark); background:var(--signal-wash); border-radius:7px; padding:8px 12px; margin-bottom:14px; display:none; }
 
   .page { max-width:920px; margin:0 auto; padding:28px 22px 90px; }
   .screen { display:none; }
@@ -242,10 +253,32 @@
     <nav>
       <button class="nav-link" onclick="go('map')">Mismatch map</button>
       <button class="nav-link" onclick="go('audit')">Auditor</button>
+      <button class="nav-link" onclick="openSignIn()">Sign in</button>
       <button class="nav-link cta" onclick="startCheck()">Report or check a zone</button>
     </nav>
   </div>
 </header>
+
+<!-- sign-in / create account modal -->
+<div id="signin-modal" class="signin-backdrop" style="display:none;" onclick="onSignInBackdropClick(event)">
+  <div class="signin-card">
+    <button class="signin-close" onclick="closeSignIn()" aria-label="Close">&times;</button>
+    <h2 class="signin-title" id="signin-title">Sign in</h2>
+    <div class="signin-error" id="signin-error"></div>
+    <label class="field-label" for="signin-email">Email</label>
+    <input id="signin-email" class="field-input" type="email" placeholder="you@example.com" autocomplete="email" />
+    <label class="field-label" for="signin-password">Password</label>
+    <input id="signin-password" class="field-input" type="password" placeholder="Password" autocomplete="current-password" />
+    <div id="signin-confirm-wrap" style="display:none;">
+      <label class="field-label" for="signin-confirm">Confirm password</label>
+      <input id="signin-confirm" class="field-input" type="password" placeholder="Confirm password" autocomplete="new-password" />
+    </div>
+    <button class="btn btn-primary btn-block" id="signin-submit" onclick="submitSignIn()">Sign in</button>
+    <p class="signin-toggle" id="signin-toggle">
+      Don&rsquo;t have an account? <a onclick="setSignInMode('create')">Create one</a>
+    </p>
+  </div>
+</div>
 
 <!-- ===== LANDING ===== -->
 <section id="screen-landing" class="screen active">
@@ -590,6 +623,78 @@ CITIES.forEach(function(c){
     });
   }
 });
+
+/* ---------- sign-in modal ---------- */
+var signinMode = 'signin'; // 'signin' | 'create'
+
+function openSignIn(){
+  signinMode = 'signin';
+  applySignInMode();
+  clearSignInFields();
+  document.getElementById('signin-modal').style.display = 'flex';
+  setTimeout(function(){ document.getElementById('signin-email').focus(); }, 60);
+}
+
+function closeSignIn(){
+  document.getElementById('signin-modal').style.display = 'none';
+  clearSignInFields();
+}
+
+function onSignInBackdropClick(e){
+  if(e.target === document.getElementById('signin-modal')) closeSignIn();
+}
+
+function setSignInMode(mode){
+  signinMode = mode;
+  applySignInMode();
+  clearSignInError();
+}
+
+function applySignInMode(){
+  var isCreate = signinMode === 'create';
+  document.getElementById('signin-title').textContent = isCreate ? 'Create account' : 'Sign in';
+  document.getElementById('signin-submit').textContent = isCreate ? 'Create account' : 'Sign in';
+  document.getElementById('signin-confirm-wrap').style.display = isCreate ? 'block' : 'none';
+  document.getElementById('signin-toggle').innerHTML = isCreate
+    ? 'Already have an account? <a onclick="setSignInMode(\'signin\')">Sign in</a>'
+    : "Don’t have an account? <a onclick=\"setSignInMode(‘create’)\">Create one</a>";
+  document.getElementById('signin-password').setAttribute('autocomplete', isCreate ? 'new-password' : 'current-password');
+}
+
+function clearSignInFields(){
+  document.getElementById('signin-email').value = '';
+  document.getElementById('signin-password').value = '';
+  document.getElementById('signin-confirm').value = '';
+  clearSignInError();
+}
+
+function clearSignInError(){ showSignInError(''); }
+
+function showSignInError(msg){
+  var el = document.getElementById('signin-error');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+function submitSignIn(){
+  var email = document.getElementById('signin-email').value.trim();
+  var password = document.getElementById('signin-password').value;
+  if(!email || !password){ showSignInError('Email and password are required.'); return; }
+  if(signinMode === 'create'){
+    var confirm = document.getElementById('signin-confirm').value;
+    if(password !== confirm){ showSignInError("Passwords don’t match."); return; }
+  }
+  // Mockup only — no real auth call.
+  showSignInError('');
+  document.getElementById('signin-submit').disabled = true;
+  document.getElementById('signin-submit').textContent = signinMode === 'create' ? 'Creating…' : 'Signing in…';
+  setTimeout(function(){
+    document.getElementById('signin-submit').disabled = false;
+    applySignInMode();
+    closeSignIn();
+    alert((signinMode === 'create' ? 'Account created' : 'Signed in') + ' as ' + email + ' (mockup — no real auth).');
+  }, 800);
+}
 
 /* ---------- navigation ---------- */
 function go(name){
