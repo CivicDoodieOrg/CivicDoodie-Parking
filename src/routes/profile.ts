@@ -3,6 +3,7 @@ import { requireAuth } from "../middleware/auth";
 import type { AuthEnv } from "../auth";
 import { validateScreenName } from "../lib/slug";
 import { generateScreenNameSuggestion } from "../lib/name-generator";
+import { getKarmaStats } from "../lib/karma";
 
 type Env = {
   Bindings: AuthEnv & {
@@ -83,6 +84,16 @@ profile.get("/", requireAuth, async (c) => {
       accounts,
     },
   });
+});
+
+// GET /api/profile/karma — points breakdown for the signed-in user.
+// Total points, per-action counts, and both milestone tracks' progress. Kept
+// separate from GET /api/profile so the karma view can be refreshed cheaply
+// after an award without re-fetching linked accounts etc.
+profile.get("/karma", requireAuth, async (c) => {
+  const user = c.get("user");
+  const stats = await getKarmaStats(c.env.DB, user.id);
+  return c.json(stats);
 });
 
 // GET /api/profile/screen-name/suggest — fresh random suggestion. Used by the

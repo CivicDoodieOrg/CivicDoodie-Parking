@@ -4,7 +4,7 @@ import { createAuth, type AuthEnv } from "./auth";
 import { rateLimit } from "./middleware/rate-limit";
 import { profile } from "./routes/profile";
 import { towns } from "./routes/towns";
-import { doodies } from "./routes/doodies";
+import { doodies, checks } from "./routes/doodies";
 import { doodieComments, comments } from "./routes/comments";
 import { dashboard } from "./routes/dashboard";
 import { admin } from "./routes/admin";
@@ -30,39 +30,28 @@ app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
   description: "Session token from Google or Facebook OAuth",
 });
 
-// CORS for local dev (mockup served from a different port / file://).
-// Same-origin requests in production are unaffected.
-app.use("/api/*", async (c, next) => {
-  const origin = c.req.header("Origin") ?? "";
+// CORS headers for a local-dev origin (mockup served from a different port /
+// file://), or null if the origin isn't a recognised localhost. Same-origin
+// production requests never hit this. Shared by the /api/* middleware and the
+// /api/auth/* catch-all so better-auth's own Response gets them too.
+function localCorsHeaders(origin: string): Record<string, string> | null {
   const isLocal =
     /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
     origin === "null";
+  if (!isLocal) return null;
+  return {
+    "Access-Control-Allow-Origin": origin || "*",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Credentials": "true",
+  };
+}
 
-  // Preflight: answer immediately with the CORS headers.
-  if (c.req.method === "OPTIONS") {
-    const headers: Record<string, string> = {};
-    if (isLocal) {
-      headers["Access-Control-Allow-Origin"] = origin || "*";
-      headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS";
-      headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization";
-      headers["Access-Control-Allow-Credentials"] = "true";
-    }
-    return new Response(null, { status: 204, headers });
-  }
-
+app.use("/api/*", async (c, next) => {
+  const cors = localCorsHeaders(c.req.header("Origin") ?? "");
+  if (cors) for (const [k, v] of Object.entries(cors)) c.header(k, v);
+  if (c.req.method === "OPTIONS") return c.body(null, 204);
   await next();
-
-  // Apply CORS headers to the ACTUAL response. Setting them via c.header()
-  // before next() is lost when a handler returns its own Response object
-  // (the better-auth handler does this), so we attach them to the final
-  // response here. Credentialed cross-origin requests require these headers
-  // on the real response, not just the preflight.
-  if (isLocal) {
-    c.res.headers.set("Access-Control-Allow-Origin", origin || "*");
-    c.res.headers.set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
-    c.res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
-    c.res.headers.set("Access-Control-Allow-Credentials", "true");
-  }
 });
 
 // Rate limiting on all /api/* routes — applied before any route logic.
@@ -115,6 +104,7 @@ const routes = app
   .route("/api/profile", profile)
   .route("/api/towns", towns)
   .route("/api/towns/:townSlug/doodies", doodies)
+  .route("/api/towns/:townSlug/checks", checks)
   .route("/api/towns/:townSlug/doodies/:doodieSlug/comments", doodieComments)
   .route("/api/towns/:townSlug/dashboard", dashboard)
   .route("/api/comments", comments)
@@ -122,7 +112,19 @@ const routes = app
 
 app.all("/api/auth/*", async (c) => {
   const auth = createAuth(c.env.DB, c.env);
-  return auth.handler(c.req.raw);
+  const res = await auth.handler(c.req.raw);
+  // better-auth returns its own Response, bypassing the /api/* CORS middleware
+  // (which sets headers on c.res before next()). Re-apply them to the response
+  // body so cross-origin dev requests (mockup on :3001/:5173) aren't blocked.
+  const cors = localCorsHeaders(c.req.header("Origin") ?? "");
+  if (!cors) return res;
+  const headers = new Headers(res.headers);
+  for (const [k, v] of Object.entries(cors)) headers.set(k, v);
+  return new Response(res.body, {
+    status: res.status,
+    statusText: res.statusText,
+    headers,
+  });
 });
 
 // Register every exported route declaration with the OpenAPI registry.

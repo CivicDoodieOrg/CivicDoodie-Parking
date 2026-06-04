@@ -305,6 +305,70 @@ export const ProfileResponse = z
   .object({ user: ProfileUser })
   .openapi("ProfileResponse");
 
+// ---- Karma ---------------------------------------------------------
+
+export const KarmaActionStat = z
+  .object({
+    action: z.string(),
+    label: z.string(),
+    points: z.number().int().openapi({ description: "Points awarded per occurrence of this action" }),
+    count: z.number().int().openapi({ description: "How many times the user earned this action" }),
+  })
+  .openapi("KarmaActionStat");
+
+export const KarmaMilestoneTrack = z
+  .object({
+    id: z.enum(["contributor", "trailblazer"]),
+    label: z.string(),
+    count: z.number().int().openapi({ description: "Current progress count for this track" }),
+    unlocked: z.number().int().openapi({ description: "How many levels are unlocked" }),
+    next: z.number().int().nullable().openapi({ description: "Next threshold, or null if maxed" }),
+    levels: z.array(
+      z.object({
+        level: z.number().int(),
+        threshold: z.number().int(),
+        bonus: z.number().int(),
+        unlocked: z.boolean(),
+      })
+    ),
+  })
+  .openapi("KarmaMilestoneTrack");
+
+export const KarmaStatsResponse = z
+  .object({
+    total_points: z.number().int(),
+    counts: z.record(z.string(), z.number().int()),
+    actions: z.array(KarmaActionStat),
+    milestones: z.array(KarmaMilestoneTrack),
+  })
+  .openapi("KarmaStatsResponse");
+
+// ---- Clean check ---------------------------------------------------
+
+export const CleanCheckMultipart = z
+  .object({
+    lat: z.string().openapi({ description: "Latitude of the checked meter" }),
+    lng: z.string().openapi({ description: "Longitude of the checked meter" }),
+    sign_zone: z.string().optional().openapi({ description: "Zone read from the sign (informational)" }),
+    app_zone: z.string().optional().openapi({ description: "Zone shown by the app (informational)" }),
+    town_city: z.string().optional(),
+    town_state: z.string().optional(),
+    town_country: z.string().optional(),
+    town_lat: z.string().optional(),
+    town_lng: z.string().optional(),
+  })
+  .openapi("CleanCheckMultipart");
+
+export const CleanCheckResponse = z
+  .object({
+    recorded: z.boolean().openapi({ description: "False for anonymous callers (nothing persisted)" }),
+    fixed: z.boolean().openapi({ description: "True when a nearby flagged doodie was auto-resolved" }),
+    doodie_slug: z.string().optional().openapi({ description: "Slug of the resolved doodie when fixed" }),
+    town_slug: z.string().optional(),
+    points_awarded: z.number().int(),
+  })
+  .openapi("CleanCheckResponse");
+
 export const ProfileUpdateRequest = z
   .object({
     city: z.string().nullable().optional(),

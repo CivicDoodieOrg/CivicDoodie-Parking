@@ -36,6 +36,9 @@ import {
   CommentCreateResponse,
   CommentCensorRequest,
   ProfileResponse,
+  KarmaStatsResponse,
+  CleanCheckMultipart,
+  CleanCheckResponse,
   ProfileUpdateRequest,
   ScreenNameCheckResponse,
   ScreenNameSuggestResponse,
@@ -142,6 +145,29 @@ export const createDoodieRoute = createRoute({
     401: { description: "Unauthorized", content: json(ErrorSchema) },
     404: { description: "Town not found", content: json(ErrorSchema) },
     412: { description: "Profile not complete", content: json(ErrorSchema) },
+    429: { description: "Rate limit exceeded", content: json(ErrorSchema) },
+  },
+});
+
+export const createCleanCheckRoute = createRoute({
+  method: "post",
+  path: "/api/towns/{townSlug}/checks",
+  tags: ["Doodies"],
+  summary: "Record a clean meter check",
+  description:
+    "Logged when a user checks a meter and the sign zone matches the app zone (no mismatch). " +
+    "Auth optional, but only signed-in users earn points / register fixes. If a flagged " +
+    "doodie sits within ~55 m it is auto-resolved (resolved_unconfirmed) and the original " +
+    "reporters are paid their fix-awards; otherwise a novel clean check awards a small bonus.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ townSlug: TownSlugParam }),
+    body: { content: { "multipart/form-data": { schema: CleanCheckMultipart } } },
+  },
+  responses: {
+    200: { description: "Recorded", content: json(CleanCheckResponse) },
+    400: { description: "Invalid input", content: json(ErrorSchema) },
+    404: { description: "Town not found", content: json(ErrorSchema) },
     429: { description: "Rate limit exceeded", content: json(ErrorSchema) },
   },
 });
@@ -401,6 +427,19 @@ export const getProfileRoute = createRoute({
   security: [{ bearerAuth: [] }],
   responses: {
     200: { description: "Profile", content: json(ProfileResponse) },
+    401: { description: "Unauthorized", content: json(ErrorSchema) },
+  },
+});
+
+export const getProfileKarmaRoute = createRoute({
+  method: "get",
+  path: "/api/profile/karma",
+  tags: ["Profile"],
+  summary: "Get the authenticated user's karma breakdown",
+  description: "Total points, per-action stats, and both milestone tracks' progress. Refreshed cheaply after an award.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: { description: "Karma stats", content: json(KarmaStatsResponse) },
     401: { description: "Unauthorized", content: json(ErrorSchema) },
   },
 });

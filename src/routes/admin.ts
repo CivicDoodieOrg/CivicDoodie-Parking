@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { requireAuth } from "../middleware/auth";
 import { requireAdmin } from "../middleware/admin";
 import type { AuthEnv } from "../auth";
+import { awardKarma } from "../lib/karma";
 
 type Env = {
   Bindings: AuthEnv & {
@@ -262,27 +263,45 @@ admin.patch("/users/:id", async (c) => {
     }
   }
 
+  // Point adjustments go through the karma ledger (action 'admin_adjust') so the
+  // SUM-based brownie_points cache stays authoritative. The ledger recompute
+  // floors the public total at 0.
+  let pointsDelta = 0;
   if (typeof body.brownie_points_delta === "number") {
     const delta = Math.trunc(body.brownie_points_delta);
     if (Number.isFinite(delta) && delta !== 0) {
-      const next = Math.max(target.brownie_points + delta, 0);
-      updates.push({ col: "brownie_points", val: next });
+      pointsDelta = delta;
       audit.brownie_points = {
         from: target.brownie_points,
-        to: next,
+        to: Math.max(target.brownie_points + delta, 0),
         delta,
       };
     }
   }
 
-  if (updates.length === 0) return c.json({ ok: true, changed: false });
+  if (updates.length === 0 && pointsDelta === 0) {
+    return c.json({ ok: true, changed: false });
+  }
 
-  const setClause = updates.map((u) => `${u.col} = ?`).join(", ");
-  await c.env.DB.prepare(
-    `UPDATE "user" SET ${setClause}, updatedAt = datetime('now') WHERE id = ?`
-  )
-    .bind(...updates.map((u) => u.val), id)
-    .run();
+  if (updates.length > 0) {
+    const setClause = updates.map((u) => `${u.col} = ?`).join(", ");
+    await c.env.DB.prepare(
+      `UPDATE "user" SET ${setClause}, updatedAt = datetime('now') WHERE id = ?`
+    )
+      .bind(...updates.map((u) => u.val), id)
+      .run();
+  }
+
+  if (pointsDelta !== 0) {
+    await awardKarma(c.env.DB, id, [
+      {
+        action: "admin_adjust",
+        points: pointsDelta,
+        dedupKey: null, // admin adjustments are always allowed (never deduped)
+        details: { reason: audit.reason ?? null, actor_id: actor.id },
+      },
+    ]);
+  }
 
   // We don't have a global audit table — moderation actions on users that
   // aren't doodie-specific don't get persisted to doodie_audit. The
