@@ -357,6 +357,34 @@
   </div>
 </div>
 
+<!-- complete-profile modal: shown after OAuth sign-in when required fields are missing -->
+<div id="cp-modal" class="signin-backdrop" style="display:none;">
+  <div class="signin-card">
+    <h2 class="signin-title">Complete your profile</h2>
+    <p style="font-size:13px; color:var(--ink-soft); margin-top:-12px; margin-bottom:18px;">A few more details before you continue.</p>
+    <div class="signin-error" id="cp-error"></div>
+    <div class="signin-name-row">
+      <div>
+        <label class="field-label" for="cp-first">First name <span style="color:var(--signal-dark);">*</span></label>
+        <input id="cp-first" class="field-input" type="text" placeholder="First" autocomplete="given-name" />
+      </div>
+      <div>
+        <label class="field-label" for="cp-last">Last name <span style="color:var(--signal-dark);">*</span></label>
+        <input id="cp-last" class="field-input" type="text" placeholder="Last" autocomplete="family-name" />
+      </div>
+    </div>
+    <label class="field-label" for="cp-username">Username <span style="color:var(--signal-dark);">*</span></label>
+    <input id="cp-username" class="field-input" type="text" placeholder="e.g. sam_r" autocomplete="username" />
+    <p style="font-size:12px; color:var(--ink-soft); margin-top:-10px; margin-bottom:16px;">3-30 characters: letters, numbers, underscore or period. This is your public name.</p>
+    <label class="field-label" for="cp-country">Country <span style="color:var(--signal-dark);">*</span></label>
+    <input id="cp-country" class="field-input" type="text" placeholder="e.g. United States" autocomplete="country-name" />
+    <label class="field-label" for="cp-city">City</label>
+    <input id="cp-city" class="field-input" type="text" placeholder="e.g. Greenwich" autocomplete="address-level2" />
+    <button class="btn btn-primary btn-block" id="cp-submit" onclick="submitCompleteProfile()" style="margin-top:6px;">Save &amp; continue</button>
+    <p class="signin-toggle">Not you? <a onclick="signOut()">Sign out</a></p>
+  </div>
+</div>
+
 <!-- ===== LANDING ===== -->
 <section id="screen-landing" class="screen active">
   <div class="landing">
@@ -932,10 +960,20 @@ function refreshAuth(){
   return fetch(API_BASE + '/api/auth/get-session', { credentials: 'include' })
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(data){
-      currentUser = (data && data.user)
-        ? { name: data.user.name, role: data.user.role || 'user' }
-        : null;
+      var u = data && data.user;
+      currentUser = u ? {
+        name: u.name,
+        role: u.role || 'user',
+        username: u.username || null,
+        first_name: u.first_name || null,
+        last_name: u.last_name || null,
+        country: u.country || null,
+        city: u.city || null,
+        email: u.email || null
+      } : null;
       updateAuthUI();
+      // Prompt OAuth (or otherwise incomplete) accounts to finish their profile.
+      maybePromptProfile();
       // If the auditor table is on screen, re-render so the Edit column
       // appears/disappears for the new role.
       if(document.getElementById('screen-audit').classList.contains('active')){
@@ -943,6 +981,76 @@ function refreshAuth(){
       }
     })
     .catch(function(){ currentUser = null; updateAuthUI(); });
+}
+
+/* ---------- complete-profile (post-OAuth) ---------- */
+// A signed-in account is "complete" once it has a username, first/last name,
+// and country. City is optional. Google sign-ups arrive missing all of these.
+function profileIncomplete(){
+  return !!currentUser && !(currentUser.username && currentUser.first_name
+    && currentUser.last_name && currentUser.country);
+}
+
+function maybePromptProfile(){
+  if(profileIncomplete()) openCompleteProfile();
+  else closeCompleteProfile();
+}
+
+function openCompleteProfile(){
+  document.getElementById('cp-first').value    = currentUser.first_name || '';
+  document.getElementById('cp-last').value     = currentUser.last_name || '';
+  document.getElementById('cp-username').value = currentUser.username || '';
+  document.getElementById('cp-country').value  = currentUser.country || '';
+  document.getElementById('cp-city').value     = currentUser.city || '';
+  cpError('');
+  document.getElementById('cp-modal').style.display = 'flex';
+}
+
+function closeCompleteProfile(){
+  document.getElementById('cp-modal').style.display = 'none';
+}
+
+function cpError(msg){
+  var el = document.getElementById('cp-error');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+function submitCompleteProfile(){
+  var first   = document.getElementById('cp-first').value.trim();
+  var last    = document.getElementById('cp-last').value.trim();
+  var uname   = document.getElementById('cp-username').value.trim();
+  var country = document.getElementById('cp-country').value.trim();
+  var city    = document.getElementById('cp-city').value.trim(); // optional
+  if(!first){ cpError('First name is required.'); return; }
+  if(!last){ cpError('Last name is required.'); return; }
+  if(!uname){ cpError('Username is required.'); return; }
+  if(!/^[a-zA-Z0-9_.]{3,30}$/.test(uname)){
+    cpError('Username must be 3-30 characters: letters, numbers, underscore or period.');
+    return;
+  }
+  if(!country){ cpError('Country is required.'); return; }
+
+  cpError('');
+  var btn = document.getElementById('cp-submit');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  // Username doubles as the public name, matching the email/password flow.
+  var payload = { name: uname, username: uname, first_name: first, last_name: last, country: country };
+  if(city) payload.city = city;
+
+  authRequest('/update-user', payload)
+    .then(function(){ return refreshAuth(); }) // refreshAuth closes the modal once complete
+    .then(function(){
+      btn.disabled = false;
+      btn.textContent = 'Save & continue';
+    })
+    .catch(function(err){
+      btn.disabled = false;
+      btn.textContent = 'Save & continue';
+      cpError(err.message || 'Could not save. Try again.');
+    });
 }
 
 function signOut(){
