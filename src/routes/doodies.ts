@@ -8,6 +8,12 @@ import {
   storeImage,
   validateImageUpload,
 } from "../lib/r2";
+import {
+  POINTS,
+  awardKarma,
+  awardFixToReporters,
+  checkAndAwardMilestones,
+} from "../lib/karma";
 
 type Env = {
   Bindings: AuthEnv & {
@@ -29,6 +35,9 @@ const DESCRIPTION_MAX = 500;
 
 // Mounted at /api/towns/:townSlug/doodies — :townSlug is available via param().
 export const doodies = new Hono<Env>();
+
+// Mounted at /api/towns/:townSlug/checks — the "clean check" flow (see bottom).
+export const checks = new Hono<Env>();
 
 // Helpers ---------------------------------------------------------------
 
@@ -332,6 +341,26 @@ doodies.post("/", async (c) => {
   ];
   await c.env.DB.batch(stmts);
 
+  // Karma: filing a brand-new doodie = being the first to report it (2500).
+  // No-op for anonymous submissions (userId null). Tiered — there is no
+  // separate "report" award stacked on top.
+  let pointsAwarded = 0;
+  if (userId) {
+    const got = await awardKarma(c.env.DB, userId, [
+      {
+        action: "first_report",
+        points: POINTS.first_report,
+        doodieId,
+        dedupKey: `report:${doodieId}`,
+        details: { doodie_id: doodieId },
+      },
+    ]);
+    if (got.length) {
+      pointsAwarded = POINTS.first_report;
+      await checkAndAwardMilestones(c.env.DB, userId);
+    }
+  }
+
   return c.json(
     {
       id: doodieId,
@@ -339,6 +368,7 @@ doodies.post("/", async (c) => {
       town_slug: townSlug,
       url: `/town/${townSlug}/d/${slug}`,
       image_count: imageRecords.length,
+      points_awarded: pointsAwarded,
     },
     201
   );
@@ -652,6 +682,18 @@ doodies.patch("/:doodieSlug", requireAuth, async (c) => {
     ),
   ]);
 
+  // Karma: when an auditor/admin marks a doodie resolved, pay the original
+  // reporters (first reporter 5000, each re-reporter 1000). Dedup keys ensure
+  // this fires once per doodie even if it's later "fixed" again or via a clean
+  // re-check. The acting auditor earns nothing here.
+  if (
+    typeof body.fix_state === "string" &&
+    body.fix_state === "resolved_unconfirmed" &&
+    doodie.fix_state !== "resolved_unconfirmed"
+  ) {
+    await awardFixToReporters(c.env.DB, doodie.id, doodie.reporter_id);
+  }
+
   return c.json({ ok: true, changed: true });
 });
 
@@ -757,7 +799,32 @@ doodies.post("/:doodieSlug/re-report", async (c) => {
   );
   await c.env.DB.batch(stmts);
 
-  return c.json({ ok: true, report_count: doodie.report_count + 1, already: false });
+  // Karma: re-reporting an existing doodie = "report" (500). Only authenticated
+  // re-reports reach here with `already:false` (the dedup guard above returns
+  // early for repeats), so the dedup_key per doodie is effectively per-user.
+  let pointsAwarded = 0;
+  if (userId) {
+    const got = await awardKarma(c.env.DB, userId, [
+      {
+        action: "report",
+        points: POINTS.report,
+        doodieId: doodie.id,
+        dedupKey: `report:${doodie.id}`,
+        details: { doodie_id: doodie.id },
+      },
+    ]);
+    if (got.length) {
+      pointsAwarded = POINTS.report;
+      await checkAndAwardMilestones(c.env.DB, userId);
+    }
+  }
+
+  return c.json({
+    ok: true,
+    report_count: doodie.report_count + 1,
+    already: false,
+    points_awarded: pointsAwarded,
+  });
 });
 
 // POST /:doodieSlug/vote — up / down / null (toggle off) ----------------
@@ -922,4 +989,164 @@ doodies.post("/:doodieSlug/report", requireAuth, async (c) => {
   ]);
 
   return c.json({ ok: true });
+});
+
+// POST /api/towns/:townSlug/checks — record a "clean check" -------------
+// A user checked a meter and the sign zone matched the app zone (no mismatch).
+// Auth is optional, but only signed-in users earn points / register fixes.
+//   • No flagged doodie nearby → novel clean check, awards 50 (anti-farm dedup).
+//   • A flagged doodie within ~55 m → auto-register the fix: flip the doodie to
+//     resolved_unconfirmed, award the checker 1500, and pay the original
+//     reporters their fix-awards (5000 / 1000) via the shared fan-out.
+// Mirrors POST / for town resolution (incl. auto-create) so unseeded cities work.
+
+// ~55 m box, matching the mockup's nearbyDoodie() threshold.
+const NEARBY_DEG = 0.0005;
+
+checks.post("/", async (c) => {
+  let userId: string | null = null;
+  try {
+    const auth = createAuth(c.env.DB, c.env);
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (session) {
+      const userRow = await c.env.DB.prepare('SELECT status FROM "user" WHERE id = ?')
+        .bind(session.user.id)
+        .first<{ status: string }>();
+      if (userRow?.status !== "banned" && userRow?.status !== "suspended") {
+        userId = session.user.id;
+      }
+    }
+  } catch {
+    /* anonymous */
+  }
+
+  const townSlug = c.req.param("townSlug")!;
+  const body = await c.req.parseBody({ all: true });
+
+  // Resolve (or auto-create) the town — same logic as filing a doodie.
+  let town = await loadTown(c.env.DB, townSlug);
+  if (!town) {
+    const autoCity = single(body.town_city).trim();
+    const autoState = single(body.town_state).trim();
+    const autoCountry = single(body.town_country).trim();
+    const autoLat = parseFloat(single(body.town_lat));
+    const autoLng = parseFloat(single(body.town_lng));
+    if (
+      autoCity && autoState && autoCountry &&
+      Number.isFinite(autoLat) && autoLat >= -90 && autoLat <= 90 &&
+      Number.isFinite(autoLng) && autoLng >= -180 && autoLng <= 180
+    ) {
+      const computedSlug = townSlugFrom(autoCity, autoState);
+      await c.env.DB.prepare(
+        `INSERT OR IGNORE INTO town (id, slug, name, state_or_region, country, lat, lng)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).bind(computedSlug, computedSlug, autoCity, autoState, autoCountry, autoLat, autoLng).run();
+      town = await loadTown(c.env.DB, computedSlug);
+    }
+    if (!town) return c.json({ error: "Town not found" }, 404);
+  }
+
+  const lat = parseFloat(single(body.lat));
+  const lng = parseFloat(single(body.lng));
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90 ||
+      !Number.isFinite(lng) || lng < -180 || lng > 180) {
+    return c.json({ error: "valid lat/lng required for a check" }, 400);
+  }
+
+  // Anonymous callers get the informational verdict only — nothing persisted.
+  if (!userId) {
+    return c.json({ recorded: false, fixed: false, points_awarded: 0 });
+  }
+
+  // Find the nearest still-open flagged doodie within the proximity box.
+  const candidates = await c.env.DB.prepare(
+    `SELECT id, slug, reporter_id, fix_state, lat, lng
+     FROM doodie
+     WHERE town_id = ? AND moderation_status = 'approved'
+       AND fix_state IN ('unresolved','investigating')
+       AND lat IS NOT NULL AND lng IS NOT NULL
+       AND ABS(lat - ?) < ? AND ABS(lng - ?) < ?`
+  )
+    .bind(town.id, lat, NEARBY_DEG, lng, NEARBY_DEG)
+    .all<{
+      id: string;
+      slug: string;
+      reporter_id: string | null;
+      fix_state: FixState;
+      lat: number;
+      lng: number;
+    }>();
+
+  let nearest: (typeof candidates.results)[number] | null = null;
+  let bestD = Infinity;
+  for (const d of candidates.results ?? []) {
+    const dd = (d.lat - lat) ** 2 + (d.lng - lng) ** 2;
+    if (dd < bestD) { bestD = dd; nearest = d; }
+  }
+
+  // Case 1: a flagged meter came back clean → auto-register the fix.
+  if (nearest) {
+    const ip = ipOf(c);
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE doodie SET fix_state = 'resolved_unconfirmed', updated_at = datetime('now') WHERE id = ?`
+      ).bind(nearest.id),
+      c.env.DB.prepare(
+        `INSERT INTO doodie_audit (id, doodie_id, actor_id, action, details, ip_address)
+         VALUES (?, ?, ?, 'audited', ?, ?)`
+      ).bind(
+        crypto.randomUUID(),
+        nearest.id,
+        userId,
+        JSON.stringify({ fix_state: { from: nearest.fix_state, to: "resolved_unconfirmed" }, via: "clean_check" }),
+        ip
+      ),
+    ]);
+
+    let pointsAwarded = 0;
+    const got = await awardKarma(c.env.DB, userId, [
+      {
+        action: "clean_recheck_fix",
+        points: POINTS.clean_recheck_fix,
+        doodieId: nearest.id,
+        dedupKey: `recheckfix:${nearest.id}`,
+        details: { doodie_id: nearest.id },
+      },
+    ]);
+    if (got.length) {
+      pointsAwarded = POINTS.clean_recheck_fix;
+      await checkAndAwardMilestones(c.env.DB, userId);
+    }
+
+    // Pay the original reporters their fix-awards (idempotent via dedup keys).
+    await awardFixToReporters(c.env.DB, nearest.id, nearest.reporter_id);
+
+    return c.json({
+      recorded: true,
+      fixed: true,
+      doodie_slug: nearest.slug,
+      town_slug: town.slug,
+      points_awarded: pointsAwarded,
+    });
+  }
+
+  // Case 2: novel clean check, no report needed → 50 points.
+  // Dedup by ~111 m grid cell per calendar day to cap farming.
+  const day = new Date().toISOString().slice(0, 10);
+  const dedupKey = `clean:${lat.toFixed(3)}:${lng.toFixed(3)}:${day}`;
+  let pointsAwarded = 0;
+  const got = await awardKarma(c.env.DB, userId, [
+    {
+      action: "clean_check",
+      points: POINTS.clean_check,
+      dedupKey,
+      details: { lat, lng },
+    },
+  ]);
+  if (got.length) {
+    pointsAwarded = POINTS.clean_check;
+    await checkAndAwardMilestones(c.env.DB, userId);
+  }
+
+  return c.json({ recorded: true, fixed: false, points_awarded: pointsAwarded });
 });

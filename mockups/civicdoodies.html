@@ -237,6 +237,34 @@
   .empty-state { text-align:center; padding:48px 20px; color:var(--ink-soft); }
   .spinner { width:22px; height:22px; border:2.5px solid var(--line-strong); border-top-color:var(--signal); border-radius:50%; animation:spin .7s linear infinite; margin:60px auto; }
 
+  /* profile */
+  .profile-page { max-width:720px; }
+  .profile-head { display:flex; align-items:center; gap:16px; margin-bottom:8px; }
+  .profile-avatar { width:54px; height:54px; border-radius:50%; background:var(--signal-wash); color:var(--signal-dark); display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:600; font-size:22px; flex-shrink:0; }
+  .profile-name { font-family:var(--font-display); font-weight:600; font-size:1.6rem; }
+  .profile-joined { font-size:13px; color:var(--ink-faint); }
+  .points-hero { text-align:center; background:var(--signal); color:#fff; border-radius:var(--radius-lg); padding:26px 20px; margin:18px 0 24px; }
+  .points-hero .ph-num { font-family:var(--font-display); font-weight:600; font-size:3rem; line-height:1; }
+  .points-hero .ph-label { font-size:13px; letter-spacing:.05em; text-transform:uppercase; opacity:.9; margin-top:6px; }
+  .karma-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-bottom:28px; }
+  .karma-card { background:var(--paper-card); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .karma-card .kc-count { font-family:var(--font-display); font-weight:600; font-size:1.7rem; color:var(--ink); }
+  .karma-card .kc-label { font-size:13px; color:var(--ink-soft); margin-top:2px; }
+  .karma-card .kc-pts { font-size:11px; color:var(--ink-faint); margin-top:4px; font-family:var(--font-mono); }
+  .track { background:var(--paper-card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:14px; }
+  .track-head { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:14px; }
+  .track-title { font-family:var(--font-display); font-weight:600; font-size:1.15rem; }
+  .track-progress { font-size:13px; color:var(--ink-faint); }
+  .track-desc { margin:-8px 0 14px; font-size:13px; color:var(--ink-faint); line-height:1.4; }
+  .track-levels { display:flex; gap:8px; }
+  .level-pip { flex:1; text-align:center; padding:10px 6px; border-radius:9px; border:1px solid var(--line); background:var(--paper); }
+  .level-pip.on { background:var(--ok-wash); border-color:var(--ok); }
+  .level-pip .lp-badge { font-size:20px; line-height:1; }
+  .level-pip .lp-thresh { font-family:var(--font-mono); font-size:13px; font-weight:500; margin-top:4px; }
+  .level-pip .lp-bonus { font-size:10px; color:var(--ink-faint); margin-top:2px; }
+  .level-pip.on .lp-bonus { color:var(--ok); }
+  .points-pill { display:inline-block; font-size:12px; font-weight:500; color:var(--ok); background:var(--ok-wash); border-radius:100px; padding:4px 12px; margin-top:8px; }
+
   /* tos */
   .tos-banner { position:fixed; left:0; right:0; bottom:0; z-index:45; background:var(--ink); color:var(--paper); padding:12px 22px; display:flex; align-items:center; justify-content:center; gap:16px; flex-wrap:wrap; font-size:13px; }
   .tos-banner button { background:var(--paper); color:var(--ink); border:none; border-radius:6px; padding:6px 14px; font-size:13px; font-weight:500; }
@@ -520,10 +548,11 @@
     <div class="check-step" data-step="3">
       <div class="done">
         <div class="done-check">&check;</div>
-        <h1>Report filed</h1>
-        <p class="muted">Thank you. This mismatch is now on the map for your city.</p>
+        <h1 id="done-title">Report filed</h1>
+        <p class="muted" id="done-sub">Thank you. This mismatch is now on the map for your city.</p>
         <p class="done-count" id="done-count"></p>
         <p class="faint" id="done-saved" style="margin-bottom:18px;"></p>
+        <p id="done-points" style="margin-bottom:18px;"></p>
         <div class="done-actions">
           <button class="btn btn-primary" onclick="go('map')">See it on the map</button>
           <button class="btn" onclick="startCheck()">Check another zone</button>
@@ -654,6 +683,11 @@
   </div>
 </section>
 
+<!-- ===== PROFILE ===== -->
+<section id="screen-profile" class="screen">
+  <div class="page profile-page" id="profile-body"></div>
+</section>
+
 <div class="tos-banner" id="tos-banner">
   <p>By using CivicDoodies you agree to our <a onclick="go('privacy')">Privacy Policy</a>.</p>
   <button onclick="document.getElementById('tos-banner').style.display='none'">Got it</button>
@@ -749,7 +783,7 @@ function updateAuthNav(){
     nav.innerHTML =
       '<button class="nav-link" onclick="go(\'map\')">Mismatch map</button>'+
       '<button class="nav-link" onclick="go(\'audit\')">Auditor</button>'+
-      '<span class="nav-user">'+escHtml(displayName)+badgeHtml+'</span>'+
+      '<button class="nav-link" onclick="go(\'profile\')" title="Your profile"><span class="nav-user">'+escHtml(displayName)+badgeHtml+'</span></button>'+
       '<button class="nav-link" onclick="doSignOut()">Sign out</button>'+
       '<button class="nav-link cta" onclick="startCheck()">Report or check a zone</button>';
   } else {
@@ -947,6 +981,7 @@ function go(name){
   if(name==='landing') renderStats();
   if(name==='map') { renderMap(); }
   if(name==='audit') { renderAuditTable(); }
+  if(name==='profile') { renderProfile(); }
 }
 
 /* ---------- landing stats ---------- */
@@ -966,6 +1001,77 @@ function renderStats(){
     });
 }
 function statCard(n,l){ return '<div class="stat"><span class="stat-num">'+n+'</span><span class="stat-label">'+l+'</span></div>'; }
+
+/* ---------- profile ---------- */
+function fmtJoined(s){
+  if(!s) return '';
+  var d=new Date(s.indexOf('T')<0 ? s.replace(' ','T')+'Z' : s);
+  if(isNaN(d)) return '';
+  return 'Joined '+d.toLocaleDateString(undefined,{ year:'numeric', month:'long' });
+}
+
+function renderProfile(){
+  var body=document.getElementById('profile-body');
+  if(!authUser){
+    body.innerHTML='<div class="empty-state"><p>Sign in to see your profile and points.</p>'+
+      '<button class="btn btn-primary" style="margin-top:14px;" onclick="openSignIn()">Sign in</button></div>';
+    return;
+  }
+  body.innerHTML='<div class="spinner"></div>';
+
+  Promise.all([ apiFetch('/api/profile'), apiFetch('/api/profile/karma') ])
+    .then(function(res){
+      var u=res[0].user, k=res[1];
+      var name=u.screen_name || u.name || 'You';
+      var initial=(name[0]||'?').toUpperCase();
+      var roleBadge=(u.role==='auditor'||u.role==='admin')
+        ? ' <span class="nav-role-badge '+u.role+'">'+u.role+'</span>' : '';
+
+      var cards=k.actions.map(function(a){
+        return '<div class="karma-card">'+
+          '<div class="kc-count">'+a.count+'</div>'+
+          '<div class="kc-label">'+escHtml(a.label)+'</div>'+
+          '<div class="kc-pts">+'+a.points.toLocaleString()+' each</div>'+
+        '</div>';
+      }).join('');
+
+      var tracks=k.milestones.map(function(t){
+        var pips=t.levels.map(function(lv){
+          return '<div class="level-pip'+(lv.unlocked?' on':'')+'">'+
+            '<div class="lp-badge">'+(lv.unlocked?'🏅':'🔒')+'</div>'+
+            '<div class="lp-thresh">'+lv.threshold+'</div>'+
+            '<div class="lp-bonus">+'+lv.bonus.toLocaleString()+'</div>'+
+          '</div>';
+        }).join('');
+        var prog=t.next!=null
+          ? t.count+' / '+t.next+' to next'
+          : t.count+' — all unlocked';
+        var desc=t.description?'<div class="track-desc">'+escHtml(t.description)+'</div>':'';
+        return '<div class="track">'+
+          '<div class="track-head"><span class="track-title">'+escHtml(t.label)+'</span>'+
+            '<span class="track-progress">'+prog+'</span></div>'+
+          desc+
+          '<div class="track-levels">'+pips+'</div>'+
+        '</div>';
+      }).join('');
+
+      body.innerHTML=
+        '<div class="profile-head">'+
+          '<div class="profile-avatar">'+escHtml(initial)+'</div>'+
+          '<div><div class="profile-name">'+escHtml(name)+roleBadge+'</div>'+
+            '<div class="profile-joined">'+fmtJoined(u.created_at)+'</div></div>'+
+        '</div>'+
+        '<div class="points-hero"><div class="ph-num">'+k.total_points.toLocaleString()+'</div>'+
+          '<div class="ph-label">total points</div></div>'+
+        '<h2 style="font-size:1.2rem; margin-bottom:12px;">How you earned them</h2>'+
+        '<div class="karma-grid">'+cards+'</div>'+
+        '<h2 style="font-size:1.2rem; margin-bottom:12px;">Milestones</h2>'+
+        tracks;
+    })
+    .catch(function(err){
+      body.innerHTML='<div class="empty-state"><p>Could not load your profile: '+escHtml(err.message||'error')+'</p></div>';
+    });
+}
 
 /* ---------- check flow ---------- */
 /* 3 screens: 1 = photo + location + name, 2 = the mismatch, 3 = done.
@@ -1016,7 +1122,12 @@ function renderCheck(){
   document.getElementById('check-stepcount').textContent='Step '+step+' of '+TOTAL;
   document.getElementById('nav-back').style.display = step>1 ? 'inline-flex' : 'none';
   var next=document.getElementById('nav-next');
-  next.textContent = step===2 ? 'Submit report' : 'Continue';
+  if(step===2){
+    var isMatch = state.sign && state.app && state.sign===state.app;
+    next.textContent = isMatch ? 'Confirm — this meter is clean' : 'Submit report';
+  } else {
+    next.textContent = 'Continue';
+  }
   next.disabled = !canAdvance();
 }
 
@@ -1520,7 +1631,13 @@ function checkNext(){
     step=2; renderCheck();
     return;
   }
-  if(step===2){ submitReport(); return; }
+  if(step===2){
+    // Mismatch → file/confirm a report. Match → log a clean check (which may
+    // auto-register a fix if a flagged doodie sits nearby).
+    if(state.sign!==state.app) submitReport();
+    else submitCleanCheck();
+    return;
+  }
 }
 
 // Step 2 location summary line.
@@ -1551,6 +1668,7 @@ function renderVerdict(){
       con=document.getElementById('v-consensus');
   if(mismatch){
     title.className='verdict-title bad'; title.textContent='Mismatch detected.';
+    con.style.color='';
     body.textContent='The sign and the app disagree. This is exactly the problem worth reporting.';
     var loc=state.loc;
     var nearby = loc && loc.lat!=null ? nearbyDoodie(loc.lat, loc.lng) : null;
@@ -1563,8 +1681,21 @@ function renderVerdict(){
     }
   } else {
     title.className='verdict-title good'; title.textContent='These zones match.';
-    body.textContent='Good news \u2014 no mismatch here. Nothing to report for this spot.';
-    con.textContent='';
+    var loc2=state.loc;
+    var nearby2 = loc2 && loc2.lat!=null ? nearbyDoodie(loc2.lat, loc2.lng) : null;
+    if(nearby2){
+      body.textContent='Good news \u2014 this meter was flagged before, but it\u2019s clean now. Confirm to register it as fixed.';
+      con.textContent = authUser
+        ? '\u2714 You\u2019ll register this fix and earn points \u2014 the original reporters are rewarded too.'
+        : 'Sign in to register this fix and earn points.';
+    } else {
+      body.textContent='Good news \u2014 no mismatch here. Nothing to report for this spot.';
+      con.textContent = authUser
+        ? '\u2714 Logging this clean check earns you points.'
+        : 'Sign in to earn points for checking meters.';
+    }
+    con.className='consensus';
+    con.style.color = authUser ? 'var(--ok)' : 'var(--ink-faint)';
   }
 }
 
@@ -1577,12 +1708,16 @@ function submitReport(){
   var nextBtn=document.getElementById('nav-next');
   if(nextBtn) nextBtn.disabled=true;
 
-  function onSuccess(slug, count){
+  function onSuccess(slug, count, points){
     state.resultCount=count; state.resultSlug=slug;
+    document.getElementById('done-title').textContent='Report filed';
+    document.getElementById('done-sub').textContent=
+      'Thank you. This mismatch is now on the map for your city.';
     document.getElementById('done-count').textContent=
       'This zone has now been reported '+count+' time'+(count===1?'':'s')+'.';
     document.getElementById('done-saved').textContent=
       'Saved as '+shortId(slug)+' · just now';
+    showDonePoints(points);
     step=3; renderCheck();
   }
 
@@ -1605,7 +1740,7 @@ function submitReport(){
   if(nearby){
     apiFetch('/api/towns/'+nearby.town_slug+'/doodies/'+nearby.slug+'/re-report',{ method:'POST' })
       .then(function(data){
-        onSuccess(nearby.slug, data.report_count || (nearby.report_count+1));
+        onSuccess(nearby.slug, data.report_count || (nearby.report_count+1), data.points_awarded);
       })
       .catch(onError);
     return;
@@ -1639,10 +1774,83 @@ function submitReport(){
     if(photoBlob) form.append('images', photoBlob, 'photo.jpg');
     return apiFetch('/api/towns/'+townSlug+'/doodies',{ method:'POST', body:form });
   }).then(function(data){
-    onSuccess(data.slug, 1);
+    onSuccess(data.slug, 1, data.points_awarded);
   }).catch(onError);
 
   }).catch(onError); // closes photoCompressionPromise.then
+}
+
+// Shared "+N points" pill on the done screen. Hidden when 0 / not signed in.
+function showDonePoints(points){
+  var el=document.getElementById('done-points');
+  if(!el) return;
+  if(points && points>0){
+    el.innerHTML='<span class="points-pill">+'+points.toLocaleString()+' points earned</span>';
+  } else {
+    el.innerHTML = authUser ? '' :
+      '<span class="faint">Sign in next time to earn points for this.</span>';
+  }
+}
+
+// Clean check: zones matched. Logs the check; if a flagged doodie is nearby the
+// backend auto-registers the fix and rewards the original reporters.
+function submitCleanCheck(){
+  var loc=state.loc||{};
+  var lat=loc.lat, lng=loc.lng;
+  var nextBtn=document.getElementById('nav-next');
+
+  if(!authUser){
+    alert('Sign in to log this check and earn points. Your Google or Facebook account works.');
+    openSignIn();
+    return;
+  }
+  if(lat==null || lng==null){
+    alert('We need a location for this check — set it on the previous step.');
+    return;
+  }
+  if(nextBtn) nextBtn.disabled=true;
+
+  function done(data){
+    var fixed = data && data.fixed;
+    document.getElementById('done-title').textContent = fixed ? 'Fix registered' : 'Check logged';
+    document.getElementById('done-sub').textContent = fixed
+      ? 'This meter was flagged before and is clean now — it’s marked fixed on the map.'
+      : 'Thanks for checking. A clean meter is good news.';
+    document.getElementById('done-count').textContent = fixed
+      ? 'The original reporters were rewarded too.' : '';
+    document.getElementById('done-saved').textContent = '';
+    showDonePoints(data ? data.points_awarded : 0);
+    step=3; renderCheck();
+  }
+
+  function fail(err){
+    if(nextBtn) nextBtn.disabled=false;
+    alert('Could not log this check: '+(err && err.message ? err.message : String(err)));
+  }
+
+  // Resolve the town the same way submitReport does (direct slug from EXIF/GPS
+  // city+state, else nearest existing town).
+  var hasTownFields = loc.city && loc.stateCode;
+  var townPromise = hasTownFields
+    ? Promise.resolve(toTownSlug(loc.city, loc.stateCode))
+    : nearestTownSlug(lat,lng);
+
+  townPromise.then(function(townSlug){
+    if(!townSlug) throw new Error('No town found near your location.');
+    var form=new FormData();
+    form.append('lat',String(lat));
+    form.append('lng',String(lng));
+    form.append('sign_zone',state.sign);
+    form.append('app_zone',state.app);
+    if(hasTownFields){
+      form.append('town_city',    loc.city);
+      form.append('town_state',   loc.stateCode);
+      form.append('town_country', loc.countryCode||'US');
+      form.append('town_lat',     String(loc.lat));
+      form.append('town_lng',     String(loc.lng));
+    }
+    return apiFetch('/api/towns/'+townSlug+'/checks',{ method:'POST', body:form });
+  }).then(done).catch(fail);
 }
 
 function nearestCityObj(lat,lng){
