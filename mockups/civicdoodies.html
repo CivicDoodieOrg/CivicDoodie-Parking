@@ -80,6 +80,11 @@
   .btn-primary { background:var(--signal); border-color:var(--signal); color:#fff; }
   .btn-primary:hover { background:var(--signal-dark); }
   .btn-block { width:100%; }
+  .signin-or { display:flex; align-items:center; text-align:center; color:var(--ink-faint); font-size:12px; margin:16px 0; }
+  .signin-or::before, .signin-or::after { content:""; flex:1; border-bottom:1px solid var(--line); }
+  .signin-or span { padding:0 12px; }
+  .btn-google { background:#fff; border:1px solid var(--line-strong); color:var(--ink); }
+  .btn-google:hover { background:var(--line); }
   .muted { color:var(--ink-soft); }
   .faint { color:var(--ink-faint); font-size:13px; }
   .card { background:var(--paper-card); border:1px solid var(--line); border-radius:var(--radius-lg); padding:18px 20px; }
@@ -344,6 +349,8 @@
     </div>
 
     <button class="btn btn-primary btn-block" id="signin-submit" onclick="submitSignIn()">Sign in</button>
+    <div class="signin-or"><span>or</span></div>
+    <button type="button" class="btn btn-google btn-block" onclick="signInWith('google')">Continue with Google</button>
     <p class="signin-toggle" id="signin-toggle">
       Don&rsquo;t have an account? <a onclick="setSignInMode('create')">Create one</a>
     </p>
@@ -804,6 +811,24 @@ function togglePasswordVisibility(){
 }
 
 function clearSignInError(){ showSignInError(''); }
+
+// Google (and other social) sign-in via better-auth. Redirects to the
+// provider, then back to the current page; refreshAuth() on load picks up
+// the new session.
+function signInWith(provider){
+  clearSignInError();
+  fetch(API_BASE + '/api/auth/sign-in/social', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider: provider, callbackURL: window.location.href })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if(data.url){ window.location.href = data.url; }
+    else showSignInError('Google sign-in unavailable. Check OAuth credentials in .dev.vars.');
+  })
+  .catch(function(err){ showSignInError('Network error: ' + (err.message || 'try again')); });
+}
 
 function showSignInError(msg){
   var el = document.getElementById('signin-error');
@@ -1873,7 +1898,7 @@ function renderAuditTable(){
       tbody.innerHTML='<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--ink-faint);">No zones match.</td></tr>';
       return;
     }
-    var canEdit = !!(currentUser && currentUser.role === 'auditor');
+    var canEdit = !!(currentUser && (currentUser.role === 'auditor' || currentUser.role === 'admin'));
     tbody.innerHTML = rows.map(function(z){
       var s = statusById(z.fix_state);
       var rowOpen = canEdit
