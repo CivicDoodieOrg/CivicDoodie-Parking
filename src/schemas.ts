@@ -276,6 +276,10 @@ export const LinkedAccount = z
   })
   .openapi("LinkedAccount");
 
+export const UserRole = z
+  .enum(["user", "auditor", "admin"])
+  .openapi("UserRole");
+
 export const ProfileUser = z
   .object({
     id: z.string(),
@@ -289,8 +293,8 @@ export const ProfileUser = z
     country: z.string().nullable(),
     brownie_points: z.number().int(),
     status: UserStatus,
+    role: UserRole,
     terms_accepted_at: z.string().nullable(),
-    role: z.enum(["user", "auditor"]),
     created_at: z.string().nullable(),
     profile_complete: z.boolean(),
     accounts: z.array(LinkedAccount),
