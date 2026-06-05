@@ -87,17 +87,19 @@ app.get("/api/health", (c) => {
 // Includes town_slug so the client can deep-link to the right town context.
 app.get("/api/map", async (c) => {
   const rows = await c.env.DB.prepare(
-    `SELECT d.id, d.slug, t.slug AS town_slug, t.name AS town_name, d.type,
+    `SELECT d.id, d.slug, t.slug AS town_slug, t.name AS town_name,
+            t.state_or_region AS town_state, d.type, d.description,
             d.lat, d.lng, d.report_count, d.fix_state,
-            d.upvotes_count, d.downvotes_count
+            d.upvotes_count, d.downvotes_count, d.last_reported_at
      FROM doodie d
      JOIN town t ON t.id = d.town_id
      WHERE d.moderation_status = 'approved'
        AND d.lat IS NOT NULL AND d.lng IS NOT NULL`
   ).all<{
-    id: string; slug: string; town_slug: string; town_name: string; type: string;
+    id: string; slug: string; town_slug: string; town_name: string;
+    town_state: string | null; type: string; description: string;
     lat: number; lng: number; report_count: number; fix_state: string;
-    upvotes_count: number; downvotes_count: number;
+    upvotes_count: number; downvotes_count: number; last_reported_at: string;
   }>();
 
   return c.json({ pins: rows.results ?? [] });

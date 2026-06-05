@@ -263,6 +263,54 @@
   .tos-banner { position:fixed; left:0; right:0; bottom:0; z-index:45; background:var(--ink); color:var(--paper); padding:12px 22px; display:flex; align-items:center; justify-content:center; gap:16px; flex-wrap:wrap; font-size:13px; }
   .tos-banner button { background:var(--paper); color:var(--ink); border:none; border-radius:6px; padding:6px 14px; font-size:13px; font-weight:500; }
   .tos-banner a { color:#f0b5a8; cursor:pointer; }
+
+  /* community feed widget — read-only */
+  .feed-fab { position:fixed; bottom:24px; right:24px; z-index:50; width:56px; height:56px; border-radius:50%; background:var(--signal); color:#fff; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 14px rgba(0,0,0,.22); transition:transform .12s,background .15s; }
+  .feed-fab:hover { background:var(--signal-dark); transform:translateY(-2px); }
+  .feed-fab:active { transform:translateY(0); }
+  .feed-fab svg { width:24px; height:24px; }
+  .feed-fab-badge { position:absolute; top:-3px; right:-3px; min-width:20px; height:20px; padding:0 5px; box-sizing:border-box; display:none; align-items:center; justify-content:center; border-radius:100px; background:var(--paper-card); color:var(--signal-dark); border:2px solid var(--signal); font-family:var(--font-body); font-size:11px; font-weight:600; line-height:1; }
+  .feed-fab.is-open { background:var(--signal-dark); }
+  .feed-panel { position:fixed; bottom:92px; right:24px; z-index:49; width:360px; height:520px; max-height:calc(100vh - 116px); display:none; flex-direction:column; overflow:hidden; background:var(--paper-card); border:1px solid var(--line); border-radius:var(--radius-lg); box-shadow:0 10px 34px rgba(0,0,0,.20); }
+  .feed-panel-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:16px 18px 12px; border-bottom:1px solid var(--line); }
+  .feed-panel-titles { display:flex; flex-direction:column; gap:6px; min-width:0; }
+  .feed-panel-title { font-family:var(--font-display); font-size:1.1rem; font-weight:500; margin:0; }
+  .feed-scope-chip { align-self:flex-start; max-width:100%; font-size:11px; font-weight:500; color:var(--signal-dark); background:var(--signal-wash); padding:3px 10px; border-radius:100px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .feed-panel-close { background:none; border:none; font-size:22px; line-height:1; color:var(--ink-faint); cursor:pointer; padding:0 2px; }
+  .feed-panel-close:hover { color:var(--ink); }
+  .feed-panel-filters { padding:10px 18px; border-bottom:1px solid var(--line); }
+  .feed-panel-list { flex:1; overflow-y:auto; padding:6px 0; }
+  .feed-loc-prompt { align-self:flex-start; margin-top:4px; display:inline-flex; align-items:center; gap:5px; background:var(--signal-wash); color:var(--signal-dark); border:1px solid var(--signal-wash); border-radius:8px; padding:6px 10px; font-family:var(--font-body); font-size:12px; font-weight:500; line-height:1.3; text-align:left; cursor:pointer; }
+  .feed-loc-prompt:hover { background:var(--signal); color:#fff; border-color:var(--signal); }
+  .feed-loc-prompt[disabled] { opacity:.6; cursor:default; }
+  .feed-loc-note { align-self:flex-start; margin-top:4px; max-width:300px; font-size:12px; color:var(--ink-soft); line-height:1.45; }
+  .feed-chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .feed-chip { font-family:var(--font-body); font-size:12px; font-weight:500; color:var(--ink-soft); background:var(--paper); border:1px solid var(--line-strong); border-radius:100px; padding:5px 12px; cursor:pointer; white-space:nowrap; }
+  .feed-chip:hover:not(.active):not([disabled]) { background:var(--line); color:var(--ink); }
+  .feed-chip.active { background:var(--signal); border-color:var(--signal); color:#fff; }
+  .feed-chip[disabled],.feed-chip.disabled { opacity:.45; cursor:not-allowed; }
+  .feed-townpicker { margin-top:8px; }
+  .feed-townsearch { width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid var(--line-strong); border-radius:8px; background:var(--paper-card); color:var(--ink); font-family:var(--font-body); font-size:13px; }
+  .feed-townsearch:focus { outline:none; border-color:var(--signal); box-shadow:0 0 0 3px var(--signal-wash); }
+  .feed-townlist { max-height:160px; overflow-y:auto; margin-top:6px; display:flex; flex-direction:column; }
+  .feed-town-item { text-align:left; background:none; border:none; padding:7px 8px; border-radius:6px; font-family:var(--font-body); font-size:13px; color:var(--ink); cursor:pointer; }
+  .feed-town-item:hover { background:var(--signal-wash); color:var(--signal-dark); }
+  .feed-town-empty { padding:8px; font-size:12px; color:var(--ink-faint); }
+  .feed-item { display:block; width:100%; text-align:left; background:none; border:none; border-bottom:1px solid var(--line); padding:11px 16px; cursor:pointer; }
+  .feed-item:last-child { border-bottom:none; }
+  .feed-item:hover { background:var(--signal-wash); }
+  .feed-item-top { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+  .feed-item-zones { font-family:var(--font-mono); font-size:14px; font-weight:500; color:var(--ink); }
+  .feed-item-town { font-size:12px; color:var(--ink-soft); }
+  .feed-item-when { font-size:12px; color:var(--ink-faint); margin-top:3px; }
+  .feed-item-count { color:var(--signal-dark); font-weight:500; }
+  .feed-item-status { margin-top:6px; }
+  .feed-item-status .status-badge { font-size:11px; padding:2px 9px; }
+  .feed-empty { padding:24px 16px; text-align:center; font-size:13px; color:var(--ink-faint); line-height:1.5; }
+  .feed-empty-actions { margin-top:10px; }
+  .feed-empty-action { background:none; border:none; color:var(--signal-dark); font-family:var(--font-body); font-size:13px; font-weight:500; cursor:pointer; padding:0; }
+  .feed-empty-action:hover { text-decoration:underline; }
+  @media (max-width:600px){ .feed-panel { right:12px; left:12px; width:auto; } }
 </style>
 </head>
 <body>
@@ -1074,6 +1122,424 @@ function go(name){
   if(name==='landing') renderStats();
   if(name==='map') { renderMap(); }
   if(name==='audit') { renderAuditTable(); }
+  updateFeedFab();
+  renderFeed(); // keep badge/list in sync from cache (no network)
+}
+
+/* ---------- community feed widget (read-only) ---------- */
+// Step 1: floating button + 24h activity badge. The feed panel comes later.
+// Feed scope: one of 'near' | 'town' | 'state' | 'country'. The chosen scope is
+// remembered across panel open/close for the session (module vars, not persisted).
+var feedScope = 'country';    // default until geolocation resolves on first open
+var feedPanelOpen = false;    // open/closed state — survives in-app navigation, no localStorage
+var feedRadiusMi = 25;        // radius for the "Near me" scope
+var userLoc = null;           // {lat, lng} once the user shares location, else null
+var userGeo = null;           // {townSlug, townName, stateCode, stateName} from reverseGeocode
+var feedGeoAsked = false;     // have we prompted for geolocation this session? (no auto re-prompt)
+var feedOtherTown = null;     // {slug, name} when an "Other town…" is picked
+var feedTownPickerOpen = false;
+var feedTowns = [];           // [{slug, name}] of towns with >=1 report, from /api/map
+
+// Human label for the current scope, shown in the panel's scope chip.
+function feedScopeLabel(){
+  switch(feedScope){
+    case 'near':  return 'Near me · ' + feedRadiusMi + ' mi';
+    case 'town':  return (userGeo && userGeo.townName) ? userGeo.townName : 'This town';
+    case 'state': return (userGeo && userGeo.stateName) ? userGeo.stateName : 'This state';
+    case 'other': return (feedOtherTown && feedOtherTown.name) ? feedOtherTown.name : 'Town';
+    default:      return 'Whole country';
+  }
+}
+
+// Great-circle distance in miles (haversine).
+function milesBetween(la1, lo1, la2, lo2){
+  var R = 3958.8, toR = Math.PI/180;
+  var dLa = (la2-la1)*toR, dLo = (lo2-lo1)*toR;
+  var a = Math.sin(dLa/2)*Math.sin(dLa/2)
+        + Math.cos(la1*toR)*Math.cos(la2*toR)*Math.sin(dLo/2)*Math.sin(dLo/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// Prefer the town's state_or_region (a 2-letter code from /api/map); otherwise
+// fall back to the town_slug "city-statecode" suffix (e.g. greenwich-ct -> CT).
+function pinStateCode(pin){
+  var s = String(pin.town_state || '').trim().toUpperCase();
+  if(s.length === 2) return s;
+  return String(pin.town_slug || '').split('-').pop().toUpperCase();
+}
+
+function inFeedScope(pin){
+  switch(feedScope){
+    case 'near':
+      if(!userLoc || pin.lat == null || pin.lng == null) return false;
+      return milesBetween(userLoc.lat, userLoc.lng, pin.lat, pin.lng) <= feedRadiusMi;
+    case 'town':
+      return !!(userGeo && pin.town_slug === userGeo.townSlug);
+    case 'state':
+      return !!(userGeo && pinStateCode(pin) === userGeo.stateCode);
+    case 'other':
+      return !!(feedOtherTown && pin.town_slug === feedOtherTown.slug);
+    default: // 'country'
+      return true;
+  }
+}
+
+// Is the feed allowed on the current screen? Hidden during the report flow
+// (screen-check while on step 1 or 2).
+function feedAllowedHere(){
+  var active = document.querySelector('.screen.active');
+  var screen = active ? active.id.replace('screen-','') : '';
+  return !(screen === 'check' && step <= 2);
+}
+
+// Sync the button + panel to the current screen and open/closed state. The panel
+// shows only where the feed is allowed AND when open; its open state survives
+// in-app navigation (in the report flow it's hidden, not closed).
+function updateFeedFab(){
+  var fab = document.getElementById('feed-fab');
+  if(!fab) return;
+  var allowed = feedAllowedHere();
+  fab.style.display = allowed ? 'flex' : 'none';
+  fab.classList.toggle('is-open', allowed && feedPanelOpen);
+  var panel = document.getElementById('feed-panel');
+  if(panel) panel.style.display = (allowed && feedPanelOpen) ? 'flex' : 'none';
+  var chip = document.getElementById('feed-scope-chip');
+  if(chip) chip.textContent = feedScopeLabel();
+  // Show the "Share location" button only after a prompt that left us without coords.
+  var showLoc = (!userLoc && feedGeoAsked);
+  var locBtn = document.getElementById('feed-loc-prompt');
+  if(locBtn) locBtn.style.display = showLoc ? 'inline-flex' : 'none';
+  var locNote = document.getElementById('feed-loc-note');
+  if(locNote && !showLoc){ locNote.style.display = 'none'; locNote.textContent = ''; } // clear once located
+}
+
+// ---- feed data: cache /api/map pins; render badge (24h) + list (7d) from them ----
+var feedPins = null;   // cached /api/map pins, or null before first load
+var feedError = false; // true when the last /api/map load failed
+
+function feedParseTime(raw){
+  if(!raw) return 0;
+  // SQLite stores UTC "YYYY-MM-DD HH:MM:SS"; normalise to ISO before parsing.
+  return new Date(String(raw).replace(' ','T') + 'Z').getTime();
+}
+
+// Relative time with minute/hour granularity (the feed only spans 7 days, so
+// the existing relativeDate() — which floors to "today" — is too coarse here).
+function feedTimeAgo(ts){
+  var diff = Date.now() - ts;
+  if(diff < 0) diff = 0;
+  var mins = Math.floor(diff / 60000);
+  if(mins < 1)  return 'just now';
+  if(mins < 60) return mins === 1 ? '1 minute ago' : mins + ' minutes ago';
+  var hrs = Math.floor(mins / 60);
+  if(hrs < 24)  return hrs === 1 ? '1 hour ago' : hrs + ' hours ago';
+  var days = Math.floor(hrs / 24);
+  return days === 1 ? 'yesterday' : days + ' days ago';
+}
+
+// Ordinal for the report iteration count: 1 -> "1st", 2 -> "2nd", 3 -> "3rd".
+function feedOrdinal(n){
+  var v = n % 100;
+  if(v >= 11 && v <= 13) return n + 'th';
+  switch(n % 10){
+    case 1:  return n + 'st';
+    case 2:  return n + 'nd';
+    case 3:  return n + 'rd';
+    default: return n + 'th';
+  }
+}
+
+// Pull the two zone numbers from "Sign shows zone X but app shows Y".
+function feedZonePair(desc){
+  var m = /zone\s+(\S+)\s+but app shows\s+(\S+)/i.exec(desc || '');
+  return m ? { sign: m[1], app: m[2] } : null;
+}
+
+// Pins in the current scope, with the "This town -> Near me 25 mi" fallback.
+function feedScopeFilter(pins){
+  var out = pins.filter(inFeedScope);
+  if(feedScope === 'town' && out.length === 0 && userLoc){
+    out = pins.filter(function(p){
+      return p.lat != null && p.lng != null
+        && milesBetween(userLoc.lat, userLoc.lng, p.lat, p.lng) <= 25;
+    });
+  }
+  return out;
+}
+
+// Fetch /api/map into the cache, then re-render badge + list.
+// silent=true for background/auto refreshes: no spinner, no error-state flip
+// (keeps showing cached data). Explicit opens/filter changes pass falsy.
+function refreshFeedData(silent){
+  if(!silent){ feedError = false; renderFeed(); } // spinner while loading (when no cache yet)
+  return apiFetch('/api/map')
+    .then(function(d){ feedPins = d.pins || []; feedError = false; renderFeed(); })
+    .catch(function(){ if(!silent) feedError = true; renderFeed(); });
+}
+
+/* Auto-refresh: poll /api/map every 60s, but only while the panel is open AND
+   the tab is visible — never in the background. */
+var feedTimer = null;
+
+function startFeedAutoRefresh(){
+  if(feedTimer) return; // already running
+  if(!(feedPanelOpen && document.visibilityState === 'visible')) return;
+  feedTimer = setInterval(function(){
+    if(feedPanelOpen && document.visibilityState === 'visible') refreshFeedData(true);
+    else stopFeedAutoRefresh();
+  }, 60000);
+}
+
+function stopFeedAutoRefresh(){
+  if(feedTimer){ clearInterval(feedTimer); feedTimer = null; }
+}
+
+// Pause polling when the tab is backgrounded; resume + catch up when it returns.
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState === 'visible'){
+    if(feedPanelOpen){ refreshFeedData(true); startFeedAutoRefresh(); }
+  } else {
+    stopFeedAutoRefresh();
+  }
+});
+
+// Render badge + list from the cached pins (instant; no network).
+function renderFeed(){
+  var scoped = feedScopeFilter(feedPins || []);
+  // Badge: in-scope reports active in the last 24 hours.
+  var cut24 = Date.now() - 24*60*60*1000, n = 0;
+  scoped.forEach(function(p){ var t = feedParseTime(p.last_reported_at); if(t && t >= cut24) n++; });
+  var badge = document.getElementById('feed-fab-badge');
+  if(badge){
+    if(n > 0){ badge.textContent = n > 99 ? '99+' : String(n); badge.style.display = 'flex'; }
+    else { badge.style.display = 'none'; }
+  }
+  // List: in-scope, last 7 days, newest first, top 20.
+  var host = document.getElementById('feed-panel-list');
+  if(!host) return;
+  if(feedPins === null){
+    host.innerHTML = feedError
+      ? '<div class="feed-empty">Couldn\'t load the feed right now. Try again.'
+          + '<div class="feed-empty-actions"><button type="button" class="feed-empty-action" onclick="refreshFeedData()">Retry</button></div></div>'
+      : '<div class="spinner"></div>';
+    return;
+  }
+  var week = Date.now() - 7*24*60*60*1000;
+  var rows = scoped.filter(function(p){ var t = feedParseTime(p.last_reported_at); return t && t >= week; });
+  rows.sort(function(a,b){ return feedParseTime(b.last_reported_at) - feedParseTime(a.last_reported_at); });
+  rows = rows.slice(0, 20);
+  if(rows.length === 0){
+    var secondary = (feedScope !== 'country')
+      ? '<div class="feed-empty-actions"><button type="button" class="feed-empty-action" onclick="selectScope(\'country\')">Try Whole country →</button></div>'
+      : '';
+    host.innerHTML = '<div class="feed-empty">No new reports in this area in the last 7 days.' + secondary + '</div>';
+    return;
+  }
+  host.innerHTML = rows.map(renderFeedItem).join('');
+}
+
+function renderFeedItem(p){
+  var pair  = feedZonePair(p.description);
+  var zones = pair ? (escapeHtml(pair.sign) + ' ≠ ' + escapeHtml(pair.app)) : escapeHtml(p.slug);
+  var town  = escapeHtml(p.town_name || p.town_slug || '');
+  var when  = escapeHtml(feedTimeAgo(feedParseTime(p.last_reported_at)));
+  var rc    = p.report_count || 1; // how many times this zone has been reported
+  var s = statusById(p.fix_state);
+  return '<button type="button" class="feed-item" onclick="openFeedItem(\''+p.slug+'\',\''+p.town_slug+'\')">'
+       +   '<div class="feed-item-top"><span class="feed-item-zones">'+zones+'</span>'
+       +     '<span class="feed-item-town">'+town+'</span></div>'
+       +   '<div class="feed-item-when">'+when+' · <span class="feed-item-count">'+feedOrdinal(rc)+' report</span></div>'
+       +   '<div class="feed-item-status"><span class="status-badge '+s.tone+'">'+escapeHtml(s.label)+'</span></div>'
+       + '</button>';
+}
+
+// Clicking a feed item closes the panel and opens the zone detail page.
+function openFeedItem(slug, townSlug){
+  closeCommunityFeed();
+  openZone(slug, townSlug);
+}
+
+// FAB click toggles the panel open/closed. On the first open this session, ask
+// for geolocation to pick a sensible default scope.
+function openCommunityFeed(){
+  feedPanelOpen = !feedPanelOpen;
+  if(feedPanelOpen){
+    if(!feedGeoAsked) requestUserLocation();
+    refreshFeedData(false);  // explicit open: spinner if no cache, then data
+    startFeedAutoRefresh();  // begin 60s polling while open + visible
+  } else {
+    stopFeedAutoRefresh();
+  }
+  updateFeedFab();
+}
+
+// The panel's × button closes it and returns the button to its idle state.
+function closeCommunityFeed(){
+  feedPanelOpen = false;
+  stopFeedAutoRefresh();
+  updateFeedFab();
+}
+
+// Ask the browser for the user's location. Runs once automatically on first
+// open; otherwise only when the user clicks "Share location" — never auto-re-prompted.
+function requestUserLocation(explicit){
+  feedGeoAsked = true;
+  if(!navigator.geolocation){ onFeedGeoDenied(explicit, null); return; }
+  var btn = document.getElementById('feed-loc-prompt');
+  if(explicit){ if(btn) btn.disabled = true; showFeedLocNote('Locating…'); }
+  navigator.geolocation.getCurrentPosition(
+    function(pos){ if(btn) btn.disabled = false; showFeedLocNote(''); onFeedGeoGranted(pos); },
+    function(err){ if(btn) btn.disabled = false; onFeedGeoDenied(explicit, err); },
+    { enableHighAccuracy:false, timeout:8000, maximumAge:600000 }
+  );
+}
+
+function showFeedLocNote(msg){
+  var el = document.getElementById('feed-loc-note');
+  if(!el) return;
+  el.textContent = msg || '';
+  el.style.display = msg ? 'block' : 'none';
+}
+
+// Explain why an explicit "Share location" tap failed, so it isn't a silent no-op.
+function feedGeoErrorMessage(err){
+  if(!window.isSecureContext)
+    return 'Location needs a secure page — open the app on http://localhost (not file://) or https, then try again.';
+  var code = err && err.code;
+  if(code === 1)
+    return "Location is blocked for this site. Click the lock / location icon in your browser's address bar, set Location to Allow, then tap again.";
+  if(code === 3)
+    return 'Location timed out. Check your connection and try again.';
+  return "Couldn't get your location. Make sure your device's location is on, then try again.";
+}
+
+function onFeedGeoGranted(pos){
+  userLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+  feedScope = 'near'; // default to "Near me · 25 mi"
+  onFeedScopeChanged();
+  // Reverse-geocode for the "This town" / "This state" presets.
+  reverseGeocode(userLoc.lat, userLoc.lng).then(function(place){
+    userGeo = {
+      townSlug:  toTownSlug(place.city || '', place.stateCode || ''),
+      townName:  place.city || '',
+      stateCode: place.stateCode || '',
+      stateName: place.state || ''
+    };
+    onFeedScopeChanged(); // town/state presets become available
+  }).catch(function(){ /* geocode unavailable — presets stay generic */ });
+}
+
+function onFeedGeoDenied(explicit, err){
+  userLoc = null;
+  feedScope = 'country'; // default to "Whole country"
+  onFeedScopeChanged();
+  if(explicit) showFeedLocNote(feedGeoErrorMessage(err)); // tell the user why the button "did nothing"
+}
+
+/* ---------- feed filter controls (Step 4) ---------- */
+// Central re-filter: refresh chips, header label, badge, and (once built) the list.
+function onFeedScopeChanged(){
+  renderFeedFilters();
+  updateFeedFab();   // header scope chip + button state
+  renderFeed();      // instant re-filter of badge + list from the cache
+}
+
+// Render the preset chip row. near/town/state require location; country always on.
+function renderFeedFilters(){
+  var host = document.getElementById('feed-chips');
+  if(!host) return;
+  var hasLoc   = !!userLoc;
+  var hasTown  = !!(userGeo && userGeo.townSlug);
+  var hasState = !!(userGeo && userGeo.stateCode);
+  var presets = [
+    { kind:'near',    label: feedScope==='near' ? 'Near me · '+feedRadiusMi+' mi' : 'Near me', enabled:hasLoc },
+    { kind:'town',    label:'This town',     enabled:hasTown },
+    { kind:'state',   label:'This state',    enabled:hasState },
+    { kind:'country', label:'Whole country', enabled:true }
+  ];
+  var html = presets.map(function(c){
+    var cls = 'feed-chip' + (feedScope===c.kind ? ' active' : '') + (c.enabled ? '' : ' disabled');
+    var attrs = c.enabled ? ' onclick="selectScope(\''+c.kind+'\')"' : ' disabled';
+    return '<button type="button" class="'+cls+'"'+attrs+'>'+escapeHtml(c.label)+'</button>';
+  }).join('');
+  var otherActive = (feedScope === 'other');
+  var otherLabel = (otherActive && feedOtherTown) ? feedOtherTown.name : 'Other town…';
+  html += '<button type="button" class="feed-chip'+(otherActive?' active':'')+'" onclick="toggleTownPicker()">'
+        + escapeHtml(otherLabel) + '</button>';
+  host.innerHTML = html;
+}
+
+function selectScope(kind){
+  if(kind === 'near' && feedScope === 'near'){
+    // cycle radius 5 -> 25 -> 100 -> back to 5
+    feedRadiusMi = feedRadiusMi===5 ? 25 : (feedRadiusMi===25 ? 100 : 5);
+  } else {
+    feedScope = kind;
+  }
+  feedTownPickerOpen = false;
+  syncTownPicker();
+  onFeedScopeChanged();    // instant: chips + header + filtered cache
+  refreshFeedData(true);   // manual change -> refetch immediately (silent, no spinner flash)
+}
+
+function syncTownPicker(){
+  var tp = document.getElementById('feed-townpicker');
+  if(tp) tp.style.display = feedTownPickerOpen ? 'block' : 'none';
+}
+
+function toggleTownPicker(){
+  feedTownPickerOpen = !feedTownPickerOpen;
+  syncTownPicker();
+  if(feedTownPickerOpen){
+    if(feedTowns.length === 0) loadFeedTowns();
+    else renderTownList((document.getElementById('feed-townsearch')||{}).value || '');
+    var s = document.getElementById('feed-townsearch');
+    if(s) setTimeout(function(){ s.focus(); }, 30);
+  }
+}
+
+// Towns with at least one report, derived from /api/map.
+function loadFeedTowns(){
+  apiFetch('/api/map').then(function(data){
+    var seen = {}, list = [];
+    (data.pins || []).forEach(function(p){
+      if(p.town_slug && !seen[p.town_slug]){
+        seen[p.town_slug] = 1;
+        list.push({ slug:p.town_slug, name:p.town_name || p.town_slug });
+      }
+    });
+    list.sort(function(a,b){ return String(a.name).localeCompare(String(b.name)); });
+    feedTowns = list;
+    renderTownList('');
+  }).catch(function(){
+    var host = document.getElementById('feed-townlist');
+    if(host) host.innerHTML = '<div class="feed-town-empty">Could not load towns.</div>';
+  });
+}
+
+function renderTownList(query){
+  var host = document.getElementById('feed-townlist');
+  if(!host) return;
+  var q = String(query || '').trim().toLowerCase();
+  var rows = feedTowns.filter(function(t){
+    return !q || t.name.toLowerCase().indexOf(q) >= 0 || t.slug.indexOf(q) >= 0;
+  });
+  if(rows.length === 0){ host.innerHTML = '<div class="feed-town-empty">No towns match.</div>'; return; }
+  host.innerHTML = rows.map(function(t){
+    // slug is URL-safe (lowercase/alnum/hyphen) so it's safe inline; name is escaped.
+    return '<button type="button" class="feed-town-item" onclick="pickOtherTown(\''+t.slug+'\')">'
+         + escapeHtml(t.name) + '</button>';
+  }).join('');
+}
+
+function pickOtherTown(slug){
+  var t = feedTowns.find(function(x){ return x.slug === slug; });
+  feedOtherTown = { slug:slug, name: t ? t.name : slug };
+  feedScope = 'other';
+  feedTownPickerOpen = false;
+  syncTownPicker();
+  onFeedScopeChanged();    // instant re-filter
+  refreshFeedData(true);   // refetch immediately (silent)
 }
 
 /* ---------- landing stats ---------- */
@@ -1126,6 +1592,7 @@ function startCheck(){
 }
 
 function renderCheck(){
+  updateFeedFab(); // hide the feed button during the report flow (steps 1-2)
   document.querySelectorAll('.check-step').forEach(function(s){
     s.classList.toggle('active', Number(s.dataset.step)===step);
   });
@@ -2107,6 +2574,38 @@ function openZone(slug, townSlug){
 
 renderStats();
 refreshAuth();
+onFeedScopeChanged();  // render filter chips + header chip for the initial scope
+refreshFeedData();     // load /api/map -> badge count (and list when opened)
 </script>
+
+<!-- community feed panel (Step 2: shell — header + scope chip + close; filters/list fill in Steps 4-5) -->
+<div id="feed-panel" class="feed-panel" role="dialog" aria-label="Recent reports">
+  <div class="feed-panel-head">
+    <div class="feed-panel-titles">
+      <h3 class="feed-panel-title">Recent reports</h3>
+      <span class="feed-scope-chip" id="feed-scope-chip">Whole country</span>
+      <button class="feed-loc-prompt" id="feed-loc-prompt" type="button" onclick="requestUserLocation(true)" style="display:none;">📍 Share location to see what's nearby</button>
+      <div class="feed-loc-note" id="feed-loc-note" style="display:none;"></div>
+    </div>
+    <button class="feed-panel-close" type="button" aria-label="Close feed" onclick="closeCommunityFeed()">&times;</button>
+  </div>
+  <div class="feed-panel-filters" id="feed-panel-filters">
+    <div class="feed-chips" id="feed-chips"></div>
+    <div class="feed-townpicker" id="feed-townpicker" style="display:none;">
+      <input class="feed-townsearch" id="feed-townsearch" type="text" placeholder="Search towns with reports…" oninput="renderTownList(this.value)" />
+      <div class="feed-townlist" id="feed-townlist"></div>
+    </div>
+  </div>
+  <div class="feed-panel-list" id="feed-panel-list"><!-- Step 5: feed list --></div>
+</div>
+
+<!-- community feed widget — read-only (Step 1: floating button) -->
+<button id="feed-fab" class="feed-fab" type="button" aria-label="Community feed" title="Community feed" onclick="openCommunityFeed()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="m3 11 18-5v12L3 14v-3z"></path>
+    <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path>
+  </svg>
+  <span id="feed-fab-badge" class="feed-fab-badge"></span>
+</button>
 </body>
 </html>
