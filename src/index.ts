@@ -8,6 +8,7 @@ import { doodies, checks } from "./routes/doodies";
 import { doodieComments, comments } from "./routes/comments";
 import { dashboard } from "./routes/dashboard";
 import { admin } from "./routes/admin";
+import { community } from "./routes/community";
 import * as openapiRoutes from "./openapi-routes";
 
 type Bindings = AuthEnv & {
@@ -131,7 +132,8 @@ const routes = app
   .route("/api/towns/:townSlug/doodies/:doodieSlug/comments", doodieComments)
   .route("/api/towns/:townSlug/dashboard", dashboard)
   .route("/api/comments", comments)
-  .route("/api/admin", admin);
+  .route("/api/admin", admin)
+  .route("/api/community", community);
 
 app.all("/api/auth/*", async (c) => {
   const auth = createAuth(c.env.DB, c.env);

@@ -245,6 +245,16 @@ export const CommentItem = z
   })
   .openapi("Comment");
 
+export const CommunityMessage = z
+  .object({
+    id: z.string(),
+    author_name: z.string(),
+    body: z.string(),
+    flagged: z.boolean(),
+    created_at: z.string(),
+  })
+  .openapi("CommunityMessage");
+
 export const CommentListResponse = z
   .object({
     comments: z.array(CommentItem),
