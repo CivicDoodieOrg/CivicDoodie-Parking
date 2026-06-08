@@ -67,24 +67,28 @@ community.post("/messages", requireAuth, async (c) => {
 
   const { body, flagged } = censor(text);
 
-  // Light anti-spam: 3s cooldown + block an exact repeat of the user's last message.
+  // Anti-spam: block an exact repeat of the user's last message, and throttle
+  // only after a burst of 5 messages within 30 seconds (the 6th gets 429).
   const last = await c.env.DB.prepare(
-    `SELECT body, created_at FROM community_message
-      WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`
+    `SELECT body FROM community_message
+      WHERE user_id = ? ORDER BY rowid DESC LIMIT 1`
   )
     .bind(user.id)
-    .first<{ body: string; created_at: string }>();
-  if (last) {
-    const lastMs = Date.parse(last.created_at.replace(" ", "T") + "Z");
-    if (!Number.isNaN(lastMs) && Date.now() - lastMs < 3000) {
-      return c.json(
-        { error: "You're posting too fast — wait a few seconds." },
-        429
-      );
-    }
-    if (last.body === body) {
-      return c.json({ error: "That's the same as your last message." }, 429);
-    }
+    .first<{ body: string }>();
+  if (last && last.body === body) {
+    return c.json({ error: "That's the same as your last message." }, 429);
+  }
+  const recent = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM community_message
+      WHERE user_id = ? AND created_at >= datetime('now', '-30 seconds')`
+  )
+    .bind(user.id)
+    .first<{ n: number }>();
+  if (recent && recent.n >= 5) {
+    return c.json(
+      { error: "You're posting too fast — slow down for a moment." },
+      429
+    );
   }
 
   const urow = await c.env.DB.prepare(
