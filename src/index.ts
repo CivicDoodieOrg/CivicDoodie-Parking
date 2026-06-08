@@ -30,15 +30,36 @@ app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
   description: "Session token from Google or Facebook OAuth",
 });
 
-// CORS headers for a local-dev origin (mockup served from a different port /
-// file://), or null if the origin isn't a recognised localhost. Same-origin
-// production requests never hit this. Shared by the /api/* middleware and the
-// /api/auth/* catch-all so better-auth's own Response gets them too.
-function localCorsHeaders(origin: string): Record<string, string> | null {
+// CORS headers for allowed cross-origin API calls. Local dev allows localhost
+// ports; deployed preview hosts are configured through AUTH_TRUSTED_ORIGINS.
+// Same-origin production requests do not need these headers. Shared by the
+// /api/* middleware and the /api/auth/* catch-all so better-auth's own
+// Response gets them too.
+function corsHeaders(origin: string, env: AuthEnv): Record<string, string> | null {
   const isLocal =
     /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
     origin === "null";
-  if (!isLocal) return null;
+  const trustedOrigins = [
+    "https://parking.civicdoodie.org",
+    "https://parking-staging.civicdoodie.org",
+    ...(env.AUTH_TRUSTED_ORIGINS ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  ];
+  const isTrusted = trustedOrigins.some((trusted) =>
+    trusted.includes("*")
+      ? new RegExp(
+          "^" +
+            trusted
+              .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+              .replace(/\*/g, "[^.]+") +
+            "$"
+        ).test(origin)
+      : trusted === origin
+  );
+
+  if (!isLocal && !isTrusted) return null;
   return {
     "Access-Control-Allow-Origin": origin || "*",
     "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
@@ -48,7 +69,7 @@ function localCorsHeaders(origin: string): Record<string, string> | null {
 }
 
 app.use("/api/*", async (c, next) => {
-  const cors = localCorsHeaders(c.req.header("Origin") ?? "");
+  const cors = corsHeaders(c.req.header("Origin") ?? "", c.env);
   if (cors) for (const [k, v] of Object.entries(cors)) c.header(k, v);
   if (c.req.method === "OPTIONS") return c.body(null, 204);
   await next();
@@ -116,7 +137,7 @@ app.all("/api/auth/*", async (c) => {
   // better-auth returns its own Response, bypassing the /api/* CORS middleware
   // (which sets headers on c.res before next()). Re-apply them to the response
   // body so cross-origin dev requests (mockup on :3001/:5173) aren't blocked.
-  const cors = localCorsHeaders(c.req.header("Origin") ?? "");
+  const cors = corsHeaders(c.req.header("Origin") ?? "", c.env);
   if (!cors) return res;
   const headers = new Headers(res.headers);
   for (const [k, v] of Object.entries(cors)) headers.set(k, v);
