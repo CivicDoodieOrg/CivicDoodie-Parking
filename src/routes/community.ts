@@ -42,9 +42,12 @@ export const community = new Hono<Env>();
 community.get("/messages", async (c) => {
   const raw = parseInt(c.req.query("limit") ?? "50", 10);
   const limit = Math.min(100, Math.max(1, Number.isNaN(raw) ? 50 : raw));
+  // The board resets daily: only today's messages (UTC) are shown. Older rows
+  // remain in the table so the flagged-message history is preserved.
   const rows = await c.env.DB.prepare(
     `SELECT id, author_name, body, flagged, created_at
        FROM community_message
+      WHERE created_at >= datetime('now', 'start of day')
       ORDER BY created_at DESC, id DESC
       LIMIT ?`
   )
