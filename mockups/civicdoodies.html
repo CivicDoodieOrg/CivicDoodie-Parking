@@ -1233,6 +1233,100 @@ function updateFeedFab(){
 // ---- feed data: cache /api/map pins; render badge (24h) + list (7d) from them ----
 var feedPins = null;   // cached /api/map pins, or null before first load
 var feedError = false; // true when the last /api/map load failed
+var feedTab = 'reports';   // 'reports' | 'community'
+var feedMessages = null;   // cached community messages, or null before first load
+var feedMsgError = false;
+
+// Switch tabs: toggle which content is visible and load the active tab's data.
+function switchFeedTab(tab){
+  feedTab = tab;
+  var isCommunity = (tab === 'community');
+  document.getElementById('feed-tab-reports').classList.toggle('active', !isCommunity);
+  document.getElementById('feed-tab-community').classList.toggle('active', isCommunity);
+  document.getElementById('feed-panel-filters').style.display = isCommunity ? 'none' : 'block';
+  document.getElementById('feed-panel-list').style.display = isCommunity ? 'none' : 'block';
+  document.getElementById('feed-community').style.display = isCommunity ? 'flex' : 'none';
+  refreshActiveTab(false);
+}
+
+// Refresh whichever tab is active (used by open, interval, visibility, tab switch).
+function refreshActiveTab(silent){
+  if(feedTab === 'community') refreshMessages(silent);
+  else refreshFeedData(silent);
+}
+
+// Fetch the community messages, then re-render. silent=true skips the spinner.
+function refreshMessages(silent){
+  if(!silent){ feedMsgError = false; renderMessages(); }
+  return apiFetch('/api/community/messages')
+    .then(function(d){ feedMessages = d.messages || []; renderMessages(); })
+    .catch(function(){ if(!silent){ feedMsgError = true; } renderMessages(); });
+}
+
+function renderMessages(){
+  renderCompose();
+  var host = document.getElementById('feed-msg-list');
+  if(!host) return;
+  if(feedMessages === null){
+    host.innerHTML = feedMsgError
+      ? '<div class="feed-empty">Couldn\'t load messages. <button type="button" class="feed-empty-action" onclick="refreshMessages()">Retry</button></div>'
+      : '<div class="spinner"></div>';
+    return;
+  }
+  if(feedMessages.length === 0){
+    host.innerHTML = '<div class="feed-empty">No messages yet — say hello.</div>';
+    return;
+  }
+  host.innerHTML = feedMessages.map(function(m){
+    var when = escapeHtml(feedTimeAgo(feedParseTime(m.created_at)));
+    return '<div class="feed-msg">'
+      +   '<div class="feed-msg-head"><span class="feed-msg-author">'+escapeHtml(m.author_name)+'</span>'
+      +     '<span class="feed-msg-when">'+when+'</span></div>'
+      +   '<div class="feed-msg-body">'+escapeHtml(m.body)+'</div>'
+      + '</div>';
+  }).join('');
+  host.scrollTop = host.scrollHeight; // keep newest in view
+}
+
+// Render the compose row: input+send when signed in, a sign-in CTA otherwise.
+function renderCompose(){
+  var host = document.getElementById('feed-compose');
+  if(!host) return;
+  if(currentUser){
+    host.className = 'feed-compose';
+    host.innerHTML = '<input id="feed-msg-input" type="text" maxlength="280" placeholder="Message the community…" '
+      + 'oninput="syncSendBtn()" onkeydown="if(event.key===\'Enter\')sendMessage()" />'
+      + '<button type="button" class="btn-send" id="feed-msg-send" onclick="sendMessage()" disabled>Send</button>';
+  } else {
+    host.className = 'feed-signin-cta';
+    host.innerHTML = 'Sign in to post. <a onclick="openSignIn(\'signin\')">Sign in</a>';
+  }
+}
+
+function syncSendBtn(){
+  var input = document.getElementById('feed-msg-input');
+  var btn = document.getElementById('feed-msg-send');
+  if(input && btn) btn.disabled = input.value.trim().length === 0;
+}
+
+function sendMessage(){
+  var input = document.getElementById('feed-msg-input');
+  var btn = document.getElementById('feed-msg-send');
+  if(!input) return;
+  var text = input.value.trim();
+  if(!text) return;
+  if(btn) btn.disabled = true;
+  apiFetch('/api/community/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body: text })
+  })
+  .then(function(){ input.value = ''; return refreshMessages(true); })
+  .catch(function(err){
+    if(btn) btn.disabled = false;
+    alert('Could not send: ' + (err.message || 'try again'));
+  });
+}
 
 function feedParseTime(raw){
   if(!raw) return 0;
@@ -1302,7 +1396,7 @@ function startFeedAutoRefresh(){
   if(feedTimer) return; // already running
   if(!(feedPanelOpen && document.visibilityState === 'visible')) return;
   feedTimer = setInterval(function(){
-    if(feedPanelOpen && document.visibilityState === 'visible') refreshFeedData(true);
+    if(feedPanelOpen && document.visibilityState === 'visible') refreshActiveTab(true);
     else stopFeedAutoRefresh();
   }, 60000);
 }
@@ -1314,7 +1408,7 @@ function stopFeedAutoRefresh(){
 // Pause polling when the tab is backgrounded; resume + catch up when it returns.
 document.addEventListener('visibilitychange', function(){
   if(document.visibilityState === 'visible'){
-    if(feedPanelOpen){ refreshFeedData(true); startFeedAutoRefresh(); }
+    if(feedPanelOpen){ refreshActiveTab(true); startFeedAutoRefresh(); }
   } else {
     stopFeedAutoRefresh();
   }
@@ -1382,7 +1476,7 @@ function openCommunityFeed(){
   feedPanelOpen = !feedPanelOpen;
   if(feedPanelOpen){
     if(!feedGeoAsked) requestUserLocation();
-    refreshFeedData(false);  // explicit open: spinner if no cache, then data
+    refreshActiveTab(false);  // explicit open: load the active tab (spinner if no cache)
     startFeedAutoRefresh();  // begin 60s polling while open + visible
   } else {
     stopFeedAutoRefresh();
