@@ -67,6 +67,26 @@ community.post("/messages", requireAuth, async (c) => {
 
   const { body, flagged } = censor(text);
 
+  // Light anti-spam: 3s cooldown + block an exact repeat of the user's last message.
+  const last = await c.env.DB.prepare(
+    `SELECT body, created_at FROM community_message
+      WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`
+  )
+    .bind(user.id)
+    .first<{ body: string; created_at: string }>();
+  if (last) {
+    const lastMs = Date.parse(last.created_at.replace(" ", "T") + "Z");
+    if (!Number.isNaN(lastMs) && Date.now() - lastMs < 3000) {
+      return c.json(
+        { error: "You're posting too fast — wait a few seconds." },
+        429
+      );
+    }
+    if (last.body === body) {
+      return c.json({ error: "That's the same as your last message." }, 429);
+    }
+  }
+
   const urow = await c.env.DB.prepare(
     `SELECT username, name FROM "user" WHERE id = ?`
   )
