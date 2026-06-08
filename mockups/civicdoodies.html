@@ -441,12 +441,17 @@
     <div class="signin-error" id="reset-error"></div>
     <label class="field-label" for="reset-email">Email</label>
     <input id="reset-email" class="field-input" type="email" placeholder="you@example.com" autocomplete="email" />
-    <button class="btn btn-primary btn-block" id="reset-getcode" onclick="resetGetCode()">Get reset code</button>
+    <button class="btn btn-primary btn-block" id="reset-getcode" onclick="resetGetCode()">Send reset code</button>
     <div id="reset-step2" style="display:none;">
-      <p class="email-hint" id="reset-codenote" style="display:block;"></p>
-      <label class="field-label" for="reset-newpw">New password <span style="color:var(--signal-dark);">*</span></label>
-      <input id="reset-newpw" class="field-input" type="password" placeholder="At least 8 characters" autocomplete="new-password" />
-      <button class="btn btn-primary btn-block" id="reset-submit" onclick="resetSubmit()">Reset password</button>
+      <p class="email-hint" id="reset-sentnote" style="display:block;"></p>
+      <p class="email-hint" id="reset-devcode" style="display:none; color:var(--signal-dark);"></p>
+      <label class="field-label" for="reset-code">Reset code</label>
+      <input id="reset-code" class="field-input" type="text" placeholder="Enter the code from your email" autocomplete="one-time-code" oninput="onResetCodeInput()" />
+      <div id="reset-step3" style="display:none;">
+        <label class="field-label" for="reset-newpw">New password <span style="color:var(--signal-dark);">*</span></label>
+        <input id="reset-newpw" class="field-input" type="password" placeholder="At least 8 characters" autocomplete="new-password" />
+        <button class="btn btn-primary btn-block" id="reset-submit" onclick="resetSubmit()">Reset password</button>
+      </div>
     </div>
     <p class="signin-toggle">Remembered it? <a onclick="closeReset(); openSignIn('signin')">Back to sign in</a></p>
   </div>
@@ -1028,10 +1033,13 @@ var resetToken = null;
 
 function openReset(){
   document.getElementById('reset-email').value = (document.getElementById('signin-email').value || '').trim();
+  document.getElementById('reset-code').value = '';
   document.getElementById('reset-newpw').value = '';
   document.getElementById('reset-step2').style.display = 'none';
+  document.getElementById('reset-step3').style.display = 'none';
+  document.getElementById('reset-devcode').style.display = 'none';
   document.getElementById('reset-getcode').disabled = false;
-  document.getElementById('reset-getcode').textContent = 'Get reset code';
+  document.getElementById('reset-getcode').textContent = 'Send reset code';
   resetToken = null;
   showResetError('');
   closeSignIn();
@@ -1047,8 +1055,8 @@ function showResetError(msg){
   el.style.display = msg ? 'block' : 'none';
 }
 
-// Step 1: ask better-auth to create a reset token, then read it from the
-// dev endpoint and show it on screen.
+// Step 1: ask better-auth to "send" a reset code. Then show the code-entry
+// field. (No email service yet, so in dev the code is also shown as a hint.)
 function resetGetCode(){
   var email = document.getElementById('reset-email').value.trim();
   if(!email){ showResetError('Enter your email.'); return; }
@@ -1062,30 +1070,44 @@ function resetGetCode(){
         .then(function(r){ return r.ok ? r.json() : { token: null }; });
     })
     .then(function(d){
-      btn.disabled = false; btn.textContent = 'Get reset code';
+      btn.disabled = false; btn.textContent = 'Send reset code';
+      // Neutral message (anti-enumeration). New password stays hidden until a code is entered.
+      document.getElementById('reset-sentnote').textContent =
+        'If an account exists for ' + email + ', a reset code was sent. Enter it below.';
+      document.getElementById('reset-step2').style.display = 'block';
+      document.getElementById('reset-step3').style.display = 'none';
+      var dev = document.getElementById('reset-devcode');
       if(d && d.token){
-        resetToken = d.token;
-        document.getElementById('reset-codenote').textContent = 'Dev mode — your reset code: ' + d.token;
-        document.getElementById('reset-step2').style.display = 'block';
+        resetToken = d.token; // only used to display the dev hint
+        dev.textContent = 'Dev mode (no email yet) — code: ' + d.token;
+        dev.style.display = 'block';
       } else {
-        showResetError('No code found — that email may not exist or uses Google sign-in.');
+        dev.style.display = 'none';
       }
+      document.getElementById('reset-code').focus();
     })
     .catch(function(err){
-      btn.disabled = false; btn.textContent = 'Get reset code';
+      btn.disabled = false; btn.textContent = 'Send reset code';
       showResetError(err.message || 'Something went wrong.');
     });
 }
 
-// Step 2: set the new password with the token.
+// Reveal the new-password field only once a reset code has been entered.
+function onResetCodeInput(){
+  var code = document.getElementById('reset-code').value.trim();
+  document.getElementById('reset-step3').style.display = code ? 'block' : 'none';
+}
+
+// Step 2: set the new password using the code the user entered.
 function resetSubmit(){
+  var code = document.getElementById('reset-code').value.trim();
   var pw = document.getElementById('reset-newpw').value;
+  if(!code){ showResetError('Enter the reset code first.'); return; }
   if(pw.length < 8){ showResetError('Password must be at least 8 characters.'); return; }
-  if(!resetToken){ showResetError('Get a reset code first.'); return; }
   showResetError('');
   var btn = document.getElementById('reset-submit');
   btn.disabled = true; btn.textContent = 'Resetting...';
-  authRequest('/reset-password', { token: resetToken, newPassword: pw })
+  authRequest('/reset-password', { token: code, newPassword: pw })
     .then(function(){
       closeReset();
       openSignIn('signin');
