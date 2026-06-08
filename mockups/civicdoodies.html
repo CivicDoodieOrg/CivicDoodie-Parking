@@ -353,8 +353,8 @@
     <h2 class="signin-title" id="signin-title">Sign in</h2>
     <div class="signin-error" id="signin-error"></div>
 
-    <!-- create-account-only fields -->
-    <div id="signin-create-fields" style="display:none;">
+    <!-- role picker (create only) -->
+    <div id="signin-role-block" style="display:none;">
       <label class="field-label" style="margin-bottom:8px;">I am a</label>
       <div class="role-picker">
         <label>
@@ -377,6 +377,16 @@
         Auditor accounts are reserved for verified government and municipal staff.
         Additional authentication will be required before your account is approved.
       </div>
+    </div>
+
+    <!-- social sign-in: top of the form, directly under the role picker in create mode -->
+    <div id="signin-google-block">
+      <button type="button" class="btn btn-google btn-block" onclick="signInWith('google')">Continue with Google</button>
+      <div class="signin-or"><span>or</span></div>
+    </div>
+
+    <!-- create-account-only fields -->
+    <div id="signin-create-fields" style="display:none;">
       <div class="signin-name-row">
         <div>
           <label class="field-label" for="signin-first">First name <span style="color:var(--signal-dark);">*</span></label>
@@ -414,8 +424,6 @@
     </div>
 
     <button class="btn btn-primary btn-block" id="signin-submit" onclick="submitSignIn()">Sign in</button>
-    <div class="signin-or"><span>or</span></div>
-    <button type="button" class="btn btn-google btn-block" onclick="signInWith('google')">Continue with Google</button>
     <p class="signin-toggle" id="signin-toggle">
       Don&rsquo;t have an account? <a onclick="setSignInMode('create')">Create one</a>
     </p>
@@ -842,6 +850,7 @@ function applySignInMode(){
   var isCreate = signinMode === 'create';
   document.getElementById('signin-title').textContent = isCreate ? 'Create account' : 'Sign in';
   document.getElementById('signin-submit').textContent = isCreate ? 'Create account' : 'Sign in';
+  document.getElementById('signin-role-block').style.display = isCreate ? 'block' : 'none';
   document.getElementById('signin-create-fields').style.display = isCreate ? 'block' : 'none';
   document.getElementById('signin-confirm-wrap').style.display = isCreate ? 'block' : 'none';
   document.getElementById('signin-remember-wrap').style.display = isCreate ? 'none' : 'flex';
