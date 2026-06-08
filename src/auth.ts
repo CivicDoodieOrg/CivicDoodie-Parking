@@ -93,6 +93,19 @@ export function createAuth(d1: D1Database, env: AuthEnv) {
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,
+      resetPasswordTokenExpiresIn: 3600, // 1 hour
+      // No email service yet. Persist the reset token so the localhost-only
+      // /api/auth-dev/reset-token endpoint can surface it on screen. In
+      // production, replace this with a real email send (and the dev endpoint
+      // returns 404). `d1` is the raw D1Database from createAuth's closure.
+      sendResetPassword: async ({ user, token }) => {
+        await d1
+          .prepare(
+            `INSERT INTO dev_password_reset (email, token) VALUES (?, ?)`
+          )
+          .bind(user.email, token)
+          .run();
+      },
     },
     plugins: [
       bearer(),
