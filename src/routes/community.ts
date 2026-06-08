@@ -79,14 +79,23 @@ community.post("/messages", requireAuth, async (c) => {
     return c.json({ error: "That's the same as your last message." }, 429);
   }
   const recent = await c.env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM community_message
-      WHERE user_id = ? AND created_at >= datetime('now', '-30 seconds')`
+    `SELECT created_at FROM community_message
+      WHERE user_id = ? AND created_at >= datetime('now', '-30 seconds')
+      ORDER BY rowid ASC`
   )
     .bind(user.id)
-    .first<{ n: number }>();
-  if (recent && recent.n >= 5) {
+    .all<{ created_at: string }>();
+  const recentRows = recent.results ?? [];
+  if (recentRows.length >= 5) {
+    // Allowed again once the oldest of the 5 ages out of the 30s window.
+    const oldestMs = Date.parse(recentRows[0].created_at.replace(" ", "T") + "Z");
+    const waitSec = Math.max(1, Math.ceil((oldestMs + 30000 - Date.now()) / 1000));
     return c.json(
-      { error: "You're posting too fast — slow down for a moment." },
+      {
+        error: `You're posting too fast — wait ${waitSec} second${
+          waitSec === 1 ? "" : "s"
+        }.`,
+      },
       429
     );
   }
