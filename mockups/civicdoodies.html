@@ -80,6 +80,8 @@
   .btn-primary { background:var(--signal); border-color:var(--signal); color:#fff; }
   .btn-primary:hover { background:var(--signal-dark); }
   .btn-block { width:100%; }
+  .signin-forgot { text-align:right; font-size:12px; margin:-8px 0 14px; }
+  .signin-forgot a { color:var(--signal-dark); font-weight:500; cursor:pointer; }
   .signin-or { display:flex; align-items:center; text-align:center; color:var(--ink-faint); font-size:12px; margin:16px 0; }
   .signin-or::before, .signin-or::after { content:""; flex:1; border-bottom:1px solid var(--line); }
   .signin-or span { padding:0 12px; }
@@ -415,6 +417,7 @@
       <button type="button" class="pw-toggle" id="pw-toggle" onclick="togglePasswordVisibility()">Show</button>
     </div>
     <input id="signin-password" class="field-input" type="password" placeholder="Password" autocomplete="current-password" />
+    <p class="signin-forgot" id="signin-forgot"><a onclick="openReset()">Forgot password?</a></p>
     <label class="signin-remember" id="signin-remember-wrap">
       <input type="checkbox" id="signin-remember" checked /> Keep me signed in
     </label>
@@ -427,6 +430,25 @@
     <p class="signin-toggle" id="signin-toggle">
       Don&rsquo;t have an account? <a onclick="setSignInMode('create')">Create one</a>
     </p>
+  </div>
+</div>
+
+<!-- password reset modal (dev delivery: the reset code is shown on screen) -->
+<div id="reset-modal" class="signin-backdrop" style="display:none;" onclick="onResetBackdrop(event)">
+  <div class="signin-card">
+    <button class="signin-close" onclick="closeReset()" aria-label="Close">&times;</button>
+    <h2 class="signin-title">Reset password</h2>
+    <div class="signin-error" id="reset-error"></div>
+    <label class="field-label" for="reset-email">Email</label>
+    <input id="reset-email" class="field-input" type="email" placeholder="you@example.com" autocomplete="email" />
+    <button class="btn btn-primary btn-block" id="reset-getcode" onclick="resetGetCode()">Get reset code</button>
+    <div id="reset-step2" style="display:none;">
+      <p class="email-hint" id="reset-codenote" style="display:block;"></p>
+      <label class="field-label" for="reset-newpw">New password <span style="color:var(--signal-dark);">*</span></label>
+      <input id="reset-newpw" class="field-input" type="password" placeholder="At least 8 characters" autocomplete="new-password" />
+      <button class="btn btn-primary btn-block" id="reset-submit" onclick="resetSubmit()">Reset password</button>
+    </div>
+    <p class="signin-toggle">Remembered it? <a onclick="closeReset(); openSignIn('signin')">Back to sign in</a></p>
   </div>
 </div>
 
@@ -854,6 +876,7 @@ function applySignInMode(){
   document.getElementById('signin-create-fields').style.display = isCreate ? 'block' : 'none';
   document.getElementById('signin-confirm-wrap').style.display = isCreate ? 'block' : 'none';
   document.getElementById('signin-remember-wrap').style.display = isCreate ? 'none' : 'flex';
+  document.getElementById('signin-forgot').style.display = isCreate ? 'none' : 'block';
   document.getElementById('signin-toggle').innerHTML = isCreate
     ? 'Already have an account? <a onclick="setSignInMode(\'signin\')">Sign in</a>'
     : "Don't have an account? <a onclick=\"setSignInMode('create')\">Create one</a>";
@@ -997,6 +1020,80 @@ function submitSignIn(){
       btn.disabled = false;
       applySignInMode();
       showSignInError(err.message || 'Something went wrong.');
+    });
+}
+
+/* ---------- password reset (dev delivery) ---------- */
+var resetToken = null;
+
+function openReset(){
+  document.getElementById('reset-email').value = (document.getElementById('signin-email').value || '').trim();
+  document.getElementById('reset-newpw').value = '';
+  document.getElementById('reset-step2').style.display = 'none';
+  document.getElementById('reset-getcode').disabled = false;
+  document.getElementById('reset-getcode').textContent = 'Get reset code';
+  resetToken = null;
+  showResetError('');
+  closeSignIn();
+  document.getElementById('reset-modal').style.display = 'flex';
+}
+
+function closeReset(){ document.getElementById('reset-modal').style.display = 'none'; }
+function onResetBackdrop(e){ if(e.target === document.getElementById('reset-modal')) closeReset(); }
+
+function showResetError(msg){
+  var el = document.getElementById('reset-error');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+// Step 1: ask better-auth to create a reset token, then read it from the
+// dev endpoint and show it on screen.
+function resetGetCode(){
+  var email = document.getElementById('reset-email').value.trim();
+  if(!email){ showResetError('Enter your email.'); return; }
+  showResetError('');
+  var btn = document.getElementById('reset-getcode');
+  btn.disabled = true; btn.textContent = 'Sending...';
+  authRequest('/request-password-reset', { email: email, redirectTo: window.location.href })
+    .catch(function(){ /* better-auth returns ok regardless (anti-enumeration) */ })
+    .then(function(){
+      return fetch(API_BASE + '/api/auth-dev/reset-token?email=' + encodeURIComponent(email), { credentials: 'include' })
+        .then(function(r){ return r.ok ? r.json() : { token: null }; });
+    })
+    .then(function(d){
+      btn.disabled = false; btn.textContent = 'Get reset code';
+      if(d && d.token){
+        resetToken = d.token;
+        document.getElementById('reset-codenote').textContent = 'Dev mode — your reset code: ' + d.token;
+        document.getElementById('reset-step2').style.display = 'block';
+      } else {
+        showResetError('No code found — that email may not exist or uses Google sign-in.');
+      }
+    })
+    .catch(function(err){
+      btn.disabled = false; btn.textContent = 'Get reset code';
+      showResetError(err.message || 'Something went wrong.');
+    });
+}
+
+// Step 2: set the new password with the token.
+function resetSubmit(){
+  var pw = document.getElementById('reset-newpw').value;
+  if(pw.length < 8){ showResetError('Password must be at least 8 characters.'); return; }
+  if(!resetToken){ showResetError('Get a reset code first.'); return; }
+  showResetError('');
+  var btn = document.getElementById('reset-submit');
+  btn.disabled = true; btn.textContent = 'Resetting...';
+  authRequest('/reset-password', { token: resetToken, newPassword: pw })
+    .then(function(){
+      closeReset();
+      openSignIn('signin');
+      alert('Password updated — sign in with your new password.');
+    })
+    .catch(function(err){
+      btn.disabled = false; btn.textContent = 'Reset password';
+      showResetError(err.message || 'Reset failed — the code may be expired. Request a new one.');
     });
 }
 
