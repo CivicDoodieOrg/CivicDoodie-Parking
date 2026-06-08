@@ -22,5 +22,11 @@
 			"binding": "IMAGES",
 			"bucket_name": "civicdoodie-parking-images-local"
 		}
+	],
+	"send_email": [
+		{
+			"name": "EMAIL",
+			"remote": true
+		}
 	]
 }

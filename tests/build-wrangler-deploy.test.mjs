@@ -27,6 +27,10 @@ describe("build-wrangler-deploy", () => {
     const cfg = run();
     expect(cfg.env.staging.name).toBe("civicdoodie-parking-staging");
     expect(cfg.env.prod.name).toBe("civicdoodie-parking");
+    expect(cfg.env.staging.send_email).toEqual(cfg.send_email);
+    expect(cfg.env.prod.send_email).toEqual(cfg.send_email);
+    expect(cfg.env.prod.vars.AUTH_EMAIL_FROM).toBe("noreply@civicdoodie.org");
+    expect(cfg.env.staging.vars.AUTH_EMAIL_FROM).toBe("noreply@civicdoodie.org");
     expect(cfg.env.preview).toBeUndefined();
   });
 
@@ -50,6 +54,7 @@ describe("build-wrangler-deploy", () => {
     expect(p.routes).toEqual([
       { pattern: "web-foo.parking-staging.civicdoodie.org", custom_domain: true },
     ]);
+    expect(p.send_email).toEqual(cfg.send_email);
     expect(p.d1_databases[0].database_id).toBe(fakeUuid);
     expect(p.d1_databases[0].database_name).toBe("civicdoodie-parking-db-staging");
     expect(p.r2_buckets[0].bucket_name).toBe("civicdoodie-parking-images-staging");
@@ -60,6 +65,7 @@ describe("build-wrangler-deploy", () => {
     expect(p.vars.BETTER_AUTH_URL).toBe(
       "https://web-foo.parking-staging.civicdoodie.org",
     );
+    expect(p.vars.AUTH_EMAIL_FROM).toBe("noreply@civicdoodie.org");
   });
 
   it("fails fast if PREVIEW_NAME is set but PREVIEW_HOST is not", () => {

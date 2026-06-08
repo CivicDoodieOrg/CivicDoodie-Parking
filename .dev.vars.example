@@ -16,5 +16,13 @@ FACEBOOK_CLIENT_SECRET=
 BETTER_AUTH_SECRET=
 BETTER_AUTH_URL=http://localhost:8787
 
+# Cloudflare Email Service / Better Auth transactional email.
+# AUTH_EMAIL_FROM must be an address on an onboarded Cloudflare Email Sending
+# domain, for example noreply@example.com. Set AUTH_REQUIRE_EMAIL_VERIFICATION
+# to true only after verification emails are confirmed working.
+AUTH_EMAIL_FROM=noreply@civicdoodie.org
+AUTH_EMAIL_FROM_NAME=CivicDoodie Parking
+AUTH_REQUIRE_EMAIL_VERIFICATION=false
+
 # Comma-separated user IDs with admin access (set after first signup).
 ADMIN_USER_IDS=

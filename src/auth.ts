@@ -3,6 +3,22 @@ import { bearer, username } from "better-auth/plugins";
 import { Kysely } from "kysely";
 import { D1Dialect } from "kysely-d1";
 
+type AuthEmailAddress = string | { name: string; email: string };
+
+type AuthEmailBinding = {
+  send: (message: {
+    from: AuthEmailAddress;
+    to: string | string[];
+    subject: string;
+    text?: string;
+    html?: string;
+  }) => Promise<{ messageId: string }>;
+};
+
+type AuthExecutionContext = {
+  waitUntil: (promise: Promise<unknown>) => void;
+};
+
 export type AuthEnv = {
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
@@ -10,6 +26,10 @@ export type AuthEnv = {
   FACEBOOK_CLIENT_SECRET?: string;
   BETTER_AUTH_SECRET: string;
   BETTER_AUTH_URL: string;
+  EMAIL?: AuthEmailBinding;
+  AUTH_EMAIL_FROM?: string;
+  AUTH_EMAIL_FROM_NAME?: string;
+  AUTH_REQUIRE_EMAIL_VERIFICATION?: string;
   // Optional: when set, scopes session cookies to a parent domain
   // (e.g. ".preview.civicdoodie.org") so multiple Workers under that
   // suffix can share a session. Unset = host-only cookie (default).
@@ -29,7 +49,67 @@ const STATIC_TRUSTED_ORIGINS = [
   "https://parking-staging.civicdoodie.org",
 ];
 
-export function createAuth(d1: D1Database, env: AuthEnv) {
+function htmlEscape(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function authEmailFrom(env: AuthEnv): AuthEmailAddress | null {
+  if (!env.AUTH_EMAIL_FROM) return null;
+  const name = env.AUTH_EMAIL_FROM_NAME?.trim() || "CivicDoodie Parking";
+  return { name, email: env.AUTH_EMAIL_FROM };
+}
+
+function queueAuthWork(
+  executionCtx: AuthExecutionContext | undefined,
+  work: Promise<unknown>
+) {
+  const logged = work.catch((err: unknown) => {
+    console.error("auth email task failed", err);
+  });
+  if (executionCtx) {
+    executionCtx.waitUntil(logged);
+  } else {
+    void logged;
+  }
+}
+
+function sendAuthEmail(
+  env: AuthEnv,
+  params: {
+    to: string;
+    subject: string;
+    text: string;
+    html: string;
+  }
+) {
+  const from = authEmailFrom(env);
+  if (!env.EMAIL || !from) {
+    return Promise.reject(
+      new Error("AUTH_EMAIL_FROM and EMAIL binding are required to send auth email")
+    );
+  }
+  return env.EMAIL.send({
+    from,
+    to: params.to,
+    subject: params.subject,
+    text: params.text,
+    html: params.html,
+  });
+}
+
+function isLocalAuthUrl(env: AuthEnv): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(env.BETTER_AUTH_URL);
+}
+
+export function createAuth(
+  d1: D1Database,
+  env: AuthEnv,
+  executionCtx?: AuthExecutionContext
+) {
   const db = new Kysely({ dialect: new D1Dialect({ database: d1 }) });
 
   const socialProviders: Record<string, { clientId: string; clientSecret: string }> = {};
@@ -90,21 +170,73 @@ export function createAuth(d1: D1Database, env: AuthEnv) {
         trustedProviders: ["google", "facebook"],
       },
     },
+    emailVerification: {
+      sendOnSignUp: Boolean(env.EMAIL && env.AUTH_EMAIL_FROM),
+      sendOnSignIn: env.AUTH_REQUIRE_EMAIL_VERIFICATION === "true",
+      autoSignInAfterVerification: true,
+      sendVerificationEmail: async ({ user, url }) => {
+        const safeUrl = htmlEscape(url);
+        queueAuthWork(
+          executionCtx,
+          sendAuthEmail(env, {
+            to: user.email,
+            subject: "Verify your CivicDoodie Parking email",
+            text: [
+              "Verify your CivicDoodie Parking email address:",
+              "",
+              url,
+              "",
+              "This link expires in 1 hour.",
+            ].join("\n"),
+            html: [
+              "<p>Verify your CivicDoodie Parking email address.</p>",
+              `<p><a href="${safeUrl}">Verify email</a></p>`,
+              "<p>This link expires in 1 hour.</p>",
+            ].join(""),
+          })
+        );
+      },
+    },
     emailAndPassword: {
       enabled: true,
-      requireEmailVerification: false,
+      requireEmailVerification: env.AUTH_REQUIRE_EMAIL_VERIFICATION === "true",
       resetPasswordTokenExpiresIn: 3600, // 1 hour
-      // No email service yet. Persist the reset token so the localhost-only
-      // /api/auth-dev/reset-token endpoint can surface it on screen. In
-      // production, replace this with a real email send (and the dev endpoint
-      // returns 404). `d1` is the raw D1Database from createAuth's closure.
-      sendResetPassword: async ({ user, token }) => {
-        await d1
-          .prepare(
-            `INSERT INTO dev_password_reset (email, token) VALUES (?, ?)`
-          )
-          .bind(user.email, token)
-          .run();
+      sendResetPassword: async ({ user, url, token }) => {
+        if (env.EMAIL && env.AUTH_EMAIL_FROM) {
+          const safeUrl = htmlEscape(url);
+          queueAuthWork(
+            executionCtx,
+            sendAuthEmail(env, {
+              to: user.email,
+              subject: "Reset your CivicDoodie Parking password",
+              text: [
+                "Reset your CivicDoodie Parking password:",
+                "",
+                url,
+                "",
+                "This link expires in 1 hour.",
+              ].join("\n"),
+              html: [
+                "<p>Reset your CivicDoodie Parking password.</p>",
+                `<p><a href="${safeUrl}">Reset password</a></p>`,
+                "<p>This link expires in 1 hour.</p>",
+              ].join(""),
+            })
+          );
+          return;
+        }
+
+        if (isLocalAuthUrl(env)) {
+          await d1
+            .prepare(
+              `INSERT INTO dev_password_reset (email, token) VALUES (?, ?)`
+            )
+            .bind(user.email, token)
+            .run();
+          return;
+        }
+
+        throw new Error("Auth email is not configured");
       },
     },
     plugins: [

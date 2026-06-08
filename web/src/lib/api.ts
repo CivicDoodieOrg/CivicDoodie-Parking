@@ -15,9 +15,26 @@ async function handleResponse<T>(respPromise: Promise<Response>): Promise<T> {
   const resp = await respPromise;
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({}));
-    throw new Error((body as { error?: string }).error || `HTTP ${resp.status}`);
+    throw new Error(
+      (body as { error?: string; message?: string }).message ||
+        (body as { error?: string; message?: string }).error ||
+        `HTTP ${resp.status}`
+    );
   }
   return resp.json() as Promise<T>;
+}
+
+async function handleAuthResponse(respPromise: Promise<Response>) {
+  const resp = await respPromise;
+  const body = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    throw new Error(
+      (body as { message?: string; error?: string }).message ||
+        (body as { message?: string; error?: string }).error ||
+        `HTTP ${resp.status}`
+    );
+  }
+  return body;
 }
 
 export const api = {
@@ -49,6 +66,45 @@ export const api = {
       .then((body: { url?: string; redirect?: boolean }) => {
         if (body.url) window.location.href = body.url;
       });
+  },
+
+  signInEmail: (email: string, password: string) => {
+    const callbackURL = window.location.origin + "/profile";
+    const base = __AUTH_BASE_URL__ || "";
+    return handleAuthResponse(
+      fetch(`${base}/api/auth/sign-in/email`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, callbackURL }),
+      })
+    );
+  },
+
+  signUpEmail: (fields: { name: string; email: string; password: string }) => {
+    const callbackURL = window.location.origin + "/profile";
+    const base = __AUTH_BASE_URL__ || "";
+    return handleAuthResponse(
+      fetch(`${base}/api/auth/sign-up/email`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...fields, callbackURL }),
+      })
+    );
+  },
+
+  requestPasswordReset: (email: string) => {
+    const redirectTo = window.location.origin + "/reset-password";
+    const base = __AUTH_BASE_URL__ || "";
+    return handleAuthResponse(
+      fetch(`${base}/api/auth/request-password-reset`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, redirectTo }),
+      })
+    );
   },
 
   // ---- Profile / User ----------------------------------------------

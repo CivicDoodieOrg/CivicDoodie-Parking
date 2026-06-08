@@ -47,6 +47,12 @@ if (!uuidRe.test(prodId)) {
 
 const basePath = resolve(repoRoot, "wrangler.json");
 const base = JSON.parse(readFileSync(basePath, "utf-8"));
+const sendEmail = Array.isArray(base.send_email) ? base.send_email : [];
+const authEmailVars = {
+  AUTH_EMAIL_FROM: "noreply@civicdoodie.org",
+  AUTH_EMAIL_FROM_NAME: "CivicDoodie Parking",
+  AUTH_REQUIRE_EMAIL_VERIFICATION: "false",
+};
 
 const previewName = process.env.PREVIEW_NAME;
 const previewHost = process.env.PREVIEW_HOST;
@@ -75,6 +81,7 @@ const deploy = {
     prod: {
       name: "civicdoodie-parking",
       routes: [{ pattern: "parking.civicdoodie.org", custom_domain: true }],
+      send_email: sendEmail,
       d1_databases: [
         {
           binding: "DB",
@@ -85,15 +92,18 @@ const deploy = {
       r2_buckets: [
         { binding: "IMAGES", bucket_name: "civicdoodie-parking-images" },
       ],
+      vars: authEmailVars,
     },
     staging: {
       name: "civicdoodie-parking-staging",
       routes: [
         { pattern: "parking-staging.civicdoodie.org", custom_domain: true },
       ],
+      send_email: sendEmail,
       d1_databases: [stagingD1],
       r2_buckets: [stagingR2],
       vars: {
+        ...authEmailVars,
         // Cookies are scoped to the parking-staging tree so preview Workers
         // under <slug>.parking-staging.civicdoodie.org share sessions with
         // staging. Prod (parking.civicdoodie.org) is outside this scope.
@@ -106,9 +116,11 @@ const deploy = {
           preview: {
             name: previewName,
             routes: [{ pattern: previewHost, custom_domain: true }],
+            send_email: sendEmail,
             d1_databases: [stagingD1],
             r2_buckets: [stagingR2],
             vars: {
+              ...authEmailVars,
               BETTER_AUTH_URL: `https://${previewHost}`,
               AUTH_COOKIE_DOMAIN: ".parking-staging.civicdoodie.org",
               AUTH_TRUSTED_ORIGINS: "https://parking-staging.civicdoodie.org",

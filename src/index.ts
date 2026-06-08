@@ -138,7 +138,7 @@ const routes = app
   .route("/api/auth-dev", authDev);
 
 app.all("/api/auth/*", async (c) => {
-  const auth = createAuth(c.env.DB, c.env);
+  const auth = createAuth(c.env.DB, c.env, c.executionCtx);
   const res = await auth.handler(c.req.raw);
   // better-auth returns its own Response, bypassing the /api/* CORS middleware
   // (which sets headers on c.res before next()). Re-apply them to the response
